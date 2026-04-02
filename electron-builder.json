@@ -1,0 +1,44 @@
+{
+  "appId": "com.cli-manager.app",
+  "productName": "CLI Manager",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*"
+  ],
+  "mac": {
+    "category": "public.app-category.developer-tools",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["x64", "arm64"]
+      }
+    ]
+  },
+  "win": {
+    "target": [
+      "nsis",
+      "portable"
+    ]
+  },
+  "linux": {
+    "target": [
+      "AppImage",
+      "deb"
+    ],
+    "category": "Development"
+  },
+  "extraResources": [
+    {
+      "from": "node_modules/better-sqlite3/build",
+      "to": "better-sqlite3/build",
+      "filter": ["**/*"]
+    }
+  ]
+}
