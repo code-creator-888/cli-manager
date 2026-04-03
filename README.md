@@ -57,6 +57,8 @@ npm install
 npm run dev
 ```
 
+macOS 下也可以直接双击项目根目录的 `start-mac.command` 一键启动。
+
 #### 构建产物
 
 ```bash
