@@ -4,7 +4,7 @@ declare global {
   interface Window {
     cliManagerAPI: {
       terminal: {
-        create: (cliType: 'claude' | 'copilot' | 'codex') => Promise<string>;
+        create: (cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => Promise<string>;
         write: (sessionId: string, data: string) => void;
         resize: (sessionId: string, cols: number, rows: number) => void;
         destroy: (sessionId: string) => void;
@@ -12,23 +12,29 @@ declare global {
         onExit: (callback: (sessionId: string, exitCode: number) => void) => () => void;
       };
       status: {
-        get: (cliType: 'claude' | 'copilot' | 'codex') => Promise<CLIStatus>;
+        get: (cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => Promise<CLIStatus>;
         checkAll: () => Promise<CLIStatus[]>;
       };
       config: {
-        get: (cliType: 'claude' | 'copilot' | 'codex') => Promise<CLIConfig>;
-        set: (cliType: 'claude' | 'copilot' | 'codex', config: Record<string, unknown>) => Promise<void>;
-        setEnvVar: (cliType: 'claude' | 'copilot' | 'codex', key: string, value: string) => Promise<void>;
-        deleteEnvVar: (cliType: 'claude' | 'copilot' | 'codex', key: string) => Promise<void>;
+        get: (cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => Promise<CLIConfig>;
+        set: (cliType: 'claude' | 'copilot' | 'codex' | 'qoder', config: Record<string, unknown>) => Promise<void>;
+        setEnvVar: (cliType: 'claude' | 'copilot' | 'codex' | 'qoder', key: string, value: string) => Promise<void>;
+        deleteEnvVar: (cliType: 'claude' | 'copilot' | 'codex' | 'qoder', key: string) => Promise<void>;
+        // Settings.json for Claude
         getSettings: () => Promise<{ path: string; content: Record<string, unknown> }>;
         setSettings: (settings: Record<string, unknown>) => Promise<void>;
+        // Apps.json for Copilot
         getApps: () => Promise<{ path: string; content: Record<string, unknown> }>;
         setApps: (apps: Record<string, unknown>) => Promise<void>;
+        // Config.toml for Codex
         getCodexConfig: () => Promise<{ path: string; content: string }>;
         setCodexConfig: (config: string) => Promise<void>;
+        // Settings.json for Qoder
+        getQoderSettings: () => Promise<{ path: string; content: Record<string, unknown> }>;
+        setQoderSettings: (settings: Record<string, unknown>) => Promise<void>;
       };
       conversation: {
-        create: (cliType: 'claude' | 'copilot' | 'codex', sessionId: string, title?: string) => Promise<string>;
+        create: (cliType: 'claude' | 'copilot' | 'codex' | 'qoder', sessionId: string, title?: string) => Promise<string>;
         get: (id: string) => Promise<Conversation | null>;
         getWithMessages: (id: string) => Promise<ConversationWithMessages | null>;
         list: (filter?: ConversationFilter) => Promise<Conversation[]>;

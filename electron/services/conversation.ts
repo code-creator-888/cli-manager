@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import * as crypto from 'crypto';
 
-type CLIType = 'claude' | 'copilot' | 'codex';
+type CLIType = 'claude' | 'copilot' | 'codex' | 'qoder';
 
 // Generate UUID v4 without external dependency
 function generateUUID(): string {
@@ -251,14 +251,18 @@ export class ConversationService {
     total: number;
     claude: number;
     copilot: number;
+    codex: number;
+    qoder: number;
     favorites: number;
   }> {
     const total = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations').get() as any).count;
     const claude = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('claude') as any).count;
     const copilot = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('copilot') as any).count;
+    const codex = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('codex') as any).count;
+    const qoder = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('qoder') as any).count;
     const favorites = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE favorite = 1').get() as any).count;
 
-    return { total, claude, copilot, favorites };
+    return { total, claude, copilot, codex, qoder, favorites };
   }
 
   private generateTitle(content: string): string {

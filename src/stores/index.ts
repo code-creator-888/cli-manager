@@ -37,6 +37,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     claude: null,
     copilot: null,
     codex: null,
+    qoder: null,
   },
   activeConversationId: null,
   conversations: {},

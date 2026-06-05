@@ -9,6 +9,8 @@ export const ConfigPanel: React.FC = () => {
   const [appsPath, setAppsPath] = useState('');
   const [codexConfig, setCodexConfig] = useState<string>('');
   const [codexConfigPath, setCodexConfigPath] = useState('');
+  const [qoderSettings, setQoderSettings] = useState<Record<string, unknown>>({});
+  const [qoderSettingsPath, setQoderSettingsPath] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -32,6 +34,10 @@ export const ConfigPanel: React.FC = () => {
         const result = await window.cliManagerAPI.config.getCodexConfig();
         setCodexConfig(result.content || '');
         setCodexConfigPath(result.path);
+      } else if (activeCLI === 'qoder') {
+        const result = await window.cliManagerAPI.config.getQoderSettings();
+        setQoderSettings(result.content || {});
+        setQoderSettingsPath(result.path);
       }
     } catch (e) {
       console.error('Failed to load config:', e);
@@ -50,6 +56,8 @@ export const ConfigPanel: React.FC = () => {
         await window.cliManagerAPI.config.setApps(apps);
       } else if (activeCLI === 'codex') {
         await window.cliManagerAPI.config.setCodexConfig(codexConfig);
+      } else if (activeCLI === 'qoder') {
+        await window.cliManagerAPI.config.setQoderSettings(qoderSettings);
       }
     } catch (e) {
       console.error('Failed to save config:', e);
@@ -66,12 +74,12 @@ export const ConfigPanel: React.FC = () => {
     );
   }
 
-  const currentPath = activeCLI === 'claude' ? settingsPath : activeCLI === 'copilot' ? appsPath : codexConfigPath;
-  const currentConfig = activeCLI === 'claude' ? settings : activeCLI === 'copilot' ? apps : codexConfig;
-  const setConfig = activeCLI === 'claude' ? setSettings : activeCLI === 'copilot' ? setApps : setCodexConfig;
-  const configTitle = activeCLI === 'claude' ? 'Settings' : activeCLI === 'copilot' ? 'Apps' : 'Config';
+  const currentPath = activeCLI === 'claude' ? settingsPath : activeCLI === 'copilot' ? appsPath : activeCLI === 'codex' ? codexConfigPath : qoderSettingsPath;
+  const currentConfig = activeCLI === 'claude' ? settings : activeCLI === 'copilot' ? apps : activeCLI === 'codex' ? codexConfig : qoderSettings;
+  const setConfig = activeCLI === 'claude' ? setSettings : activeCLI === 'copilot' ? setApps : activeCLI === 'codex' ? setCodexConfig : setQoderSettings;
+  const configTitle = activeCLI === 'claude' ? 'Settings' : activeCLI === 'copilot' ? 'Apps' : activeCLI === 'codex' ? 'Config' : 'Settings';
 
-  const cliTitle = activeCLI === 'claude' ? 'Claude CLI' : activeCLI === 'copilot' ? 'Copilot CLI' : 'Codex CLI';
+  const cliTitle = activeCLI === 'claude' ? 'Claude CLI' : activeCLI === 'copilot' ? 'Copilot CLI' : activeCLI === 'codex' ? 'Codex CLI' : 'Qoder CLI';
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar p-6">

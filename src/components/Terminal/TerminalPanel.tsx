@@ -25,7 +25,7 @@ export const TerminalPanel: React.FC = () => {
   }, [activeSessionId, sessions, activeCLI, currentCLISessions]);
 
   // Create a new session
-  const createSession = useCallback(async (cliType: 'claude' | 'copilot' | 'codex') => {
+  const createSession = useCallback(async (cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
     if (!window.cliManagerAPI || isCreatingRef.current) return;
 
     isCreatingRef.current = true;
@@ -180,6 +180,16 @@ export const TerminalPanel: React.FC = () => {
           }`}
         >
           Codex
+        </button>
+        <button
+          onClick={() => useAppStore.getState().setActiveCLI('qoder')}
+          className={`px-6 py-3 text-sm font-medium transition-colors ${
+            activeCLI === 'qoder'
+              ? 'bg-qoder-primary text-white'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+        >
+          Qoder
         </button>
       </div>
 

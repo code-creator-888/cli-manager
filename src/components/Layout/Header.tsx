@@ -30,6 +30,8 @@ export const Header: React.FC<HeaderProps> = ({ activeView }) => {
               ? 'bg-copilot-primary/20 text-copilot-secondary'
               : activeCLI === 'codex'
               ? 'bg-codex-primary/20 text-codex-secondary'
+              : activeCLI === 'qoder'
+              ? 'bg-qoder-primary/20 text-qoder-secondary'
               : 'bg-gray-500/20 text-gray-400'
           }`}
         >

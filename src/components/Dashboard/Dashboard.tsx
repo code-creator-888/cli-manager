@@ -6,12 +6,13 @@ interface Stats {
   claude: number;
   copilot: number;
   codex: number;
+  qoder: number;
   favorites: number;
 }
 
 export const Dashboard: React.FC = () => {
   const { statuses, updateStatus, addSession, setActiveCLI, setActiveSession } = useAppStore();
-  const [stats, setStats] = useState<Stats>({ total: 0, claude: 0, copilot: 0, codex: 0, favorites: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, claude: 0, copilot: 0, codex: 0, qoder: 0, favorites: 0 });
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -40,6 +41,7 @@ export const Dashboard: React.FC = () => {
             claude: conversations.filter((conversation) => conversation.cliType === 'claude').length,
             copilot: conversations.filter((conversation) => conversation.cliType === 'copilot').length,
             codex: conversations.filter((conversation) => conversation.cliType === 'codex').length,
+            qoder: conversations.filter((conversation) => conversation.cliType === 'qoder').length,
             favorites,
           });
         } catch (e) {
@@ -51,7 +53,7 @@ export const Dashboard: React.FC = () => {
     fetchStats();
   }, []);
 
-  const openTerminal = async (cliType: 'claude' | 'copilot' | 'codex') => {
+  const openTerminal = async (cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
     if (!window.cliManagerAPI) return;
 
     try {
@@ -154,7 +156,7 @@ export const Dashboard: React.FC = () => {
       <h2 className="text-xl font-semibold text-text-primary mb-6">Dashboard</h2>
 
       {/* Status Cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6">
         <StatusCard
           title="Claude CLI"
           status={statuses.claude}
@@ -170,21 +172,27 @@ export const Dashboard: React.FC = () => {
           status={statuses.codex}
           color="bg-codex-primary"
         />
+        <StatusCard
+          title="Qoder CLI"
+          status={statuses.qoder}
+          color="bg-qoder-primary"
+        />
       </div>
 
       {/* Stats */}
       <h3 className="text-lg font-medium text-text-primary mb-4">History Statistics</h3>
-      <div className="grid grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-6 gap-4 mb-6">
         <StatCard title="Total Commands" value={stats.total} icon="📊" />
         <StatCard title="Claude Commands" value={stats.claude} icon="🤖" />
         <StatCard title="Copilot Commands" value={stats.copilot} icon="✈️" />
         <StatCard title="Codex Commands" value={stats.codex} icon="🔬" />
+        <StatCard title="Qoder Commands" value={stats.qoder} icon="⚡" />
         <StatCard title="Favorites" value={stats.favorites} icon="⭐" />
       </div>
 
       {/* Quick Actions */}
       <h3 className="text-lg font-medium text-text-primary mb-4">Quick Actions</h3>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <button
           onClick={() => openTerminal('claude')}
           className="bg-claude-primary/20 hover:bg-claude-primary/30 text-claude-secondary px-4 py-3 rounded-lg transition-colors"
@@ -202,6 +210,12 @@ export const Dashboard: React.FC = () => {
           className="bg-codex-primary/20 hover:bg-codex-primary/30 text-codex-secondary px-4 py-3 rounded-lg transition-colors"
         >
           Open Codex CLI
+        </button>
+        <button
+          onClick={() => openTerminal('qoder')}
+          className="bg-qoder-primary/20 hover:bg-qoder-primary/30 text-qoder-secondary px-4 py-3 rounded-lg transition-colors"
+        >
+          Open Qoder CLI
         </button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 
-type CLIType = 'claude' | 'copilot' | 'codex';
+type CLIType = 'claude' | 'copilot' | 'codex' | 'qoder';
 
 export interface ParsedMessage {
   role: 'user' | 'assistant' | 'tool';
@@ -56,7 +56,7 @@ export class ConversationParser extends EventEmitter {
   }
 
   private processLine(line: string): void {
-    if (this.cliType === 'claude') {
+    if (this.cliType === 'claude' || this.cliType === 'qoder') {
       this.processClaudeLine(line);
     } else {
       this.processCopilotLine(line);

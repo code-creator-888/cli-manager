@@ -13,6 +13,8 @@ export default {
         'copilot-secondary': '#34D399',
         'codex-primary': '#8B5CF6',
         'codex-secondary': '#A78BFA',
+        'qoder-primary': '#3B82F6',
+        'qoder-secondary': '#60A5FA',
         'bg-primary': '#1a1a2e',
         'bg-secondary': '#16213e',
         'bg-tertiary': '#0f3460',

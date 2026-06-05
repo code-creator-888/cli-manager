@@ -6,7 +6,7 @@ import { ConversationParser, ParsedMessage } from './conversation-parser';
 
 interface TerminalSession {
   pty: pty.IPty;
-  cliType: 'claude' | 'copilot' | 'codex';
+  cliType: 'claude' | 'copilot' | 'codex' | 'qoder';
   createdAt: Date;
   lastActivity: Date;
   conversationId?: string;
@@ -29,7 +29,7 @@ export class TerminalService extends EventEmitter {
     return result.status === 0;
   }
 
-  createSession(command: string, cliType: 'claude' | 'copilot' | 'codex'): string {
+  createSession(command: string, cliType: 'claude' | 'copilot' | 'codex' | 'qoder'): string {
     if (!this.hasCommand(command)) {
       throw new Error(`${cliType} CLI is not installed or not available in PATH`);
     }

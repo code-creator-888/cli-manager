@@ -1,5 +1,5 @@
 // CLI Types
-export type CLIType = 'claude' | 'copilot' | 'codex';
+export type CLIType = 'claude' | 'copilot' | 'codex' | 'qoder';
 
 // Terminal Types
 export interface TerminalSession {

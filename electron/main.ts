@@ -5,6 +5,7 @@ import { TerminalService } from './services/terminal';
 import { ClaudeCLIService } from './services/claude-cli';
 import { CopilotCLIService } from './services/copilot-cli';
 import { CodexCLIService } from './services/codex-cli';
+import { QoderCLIService } from './services/qoder-cli';
 import { ConfigService } from './services/config';
 import { ConversationService, ConversationMessage, ConversationFilter } from './services/conversation';
 
@@ -13,6 +14,7 @@ let terminalService: TerminalService;
 let claudeService: ClaudeCLIService;
 let copilotService: CopilotCLIService;
 let codexService: CodexCLIService;
+let qoderService: QoderCLIService;
 let configService: ConfigService;
 let conversationService: ConversationService;
 
@@ -23,9 +25,11 @@ function getWindowIcon(): string | undefined {
   return fs.existsSync(iconPath) ? iconPath : undefined;
 }
 
-function getCommandForCLI(cliType: 'claude' | 'copilot' | 'codex'): string {
+function getCommandForCLI(cliType: 'claude' | 'copilot' | 'codex' | 'qoder'): string {
   const candidates = cliType === 'copilot'
     ? ['copilot', 'github-copilot-cli']
+    : cliType === 'qoder'
+    ? ['qodercli']
     : [cliType];
 
   const command = candidates.find((candidate) => terminalService.hasCommand(candidate));
@@ -88,6 +92,7 @@ async function initializeServices(): Promise<void> {
   claudeService = new ClaudeCLIService();
   copilotService = new CopilotCLIService();
   codexService = new CodexCLIService();
+  qoderService = new QoderCLIService();
 
   await conversationService.initialize();
 }
@@ -95,7 +100,7 @@ async function initializeServices(): Promise<void> {
 // Set up IPC handlers
 function setupIPCHandlers(): void {
   // Terminal handlers
-  ipcMain.handle('terminal:create', async (_, cliType: 'claude' | 'copilot' | 'codex') => {
+  ipcMain.handle('terminal:create', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
     const command = getCommandForCLI(cliType);
     return terminalService.createSession(command, cliType);
   });
@@ -122,36 +127,38 @@ function setupIPCHandlers(): void {
   });
 
   // Status handlers
-  ipcMain.handle('status:get', async (_, cliType: 'claude' | 'copilot' | 'codex') => {
+  ipcMain.handle('status:get', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
     if (cliType === 'claude') return claudeService.getStatus();
     if (cliType === 'codex') return codexService.getStatus();
+    if (cliType === 'qoder') return qoderService.getStatus();
     return copilotService.getStatus();
   });
 
   ipcMain.handle('status:checkAll', async () => {
     // 并行检查所有 CLI 状态，提高速度
-    const [claudeStatus, copilotStatus, codexStatus] = await Promise.all([
+    const [claudeStatus, copilotStatus, codexStatus, qoderStatus] = await Promise.all([
       claudeService.checkStatus(),
       copilotService.checkStatus(),
       codexService.checkStatus(),
+      qoderService.checkStatus(),
     ]);
-    return [claudeStatus, copilotStatus, codexStatus];
+    return [claudeStatus, copilotStatus, codexStatus, qoderStatus];
   });
 
   // Config handlers
-  ipcMain.handle('config:get', async (_, cliType: 'claude' | 'copilot' | 'codex') => {
+  ipcMain.handle('config:get', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
     return configService.get(cliType);
   });
 
-  ipcMain.handle('config:set', async (_, cliType: 'claude' | 'copilot' | 'codex', config: Record<string, unknown>) => {
+  ipcMain.handle('config:set', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', config: Record<string, unknown>) => {
     await configService.set(cliType, config);
   });
 
-  ipcMain.handle('config:setEnvVar', async (_, cliType: 'claude' | 'copilot' | 'codex', key: string, value: string) => {
+  ipcMain.handle('config:setEnvVar', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', key: string, value: string) => {
     await configService.setEnvVar(cliType, key, value);
   });
 
-  ipcMain.handle('config:deleteEnvVar', async (_, cliType: 'claude' | 'copilot' | 'codex', key: string) => {
+  ipcMain.handle('config:deleteEnvVar', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', key: string) => {
     await configService.deleteEnvVar(cliType, key);
   });
 
@@ -182,8 +189,17 @@ function setupIPCHandlers(): void {
     await configService.setCodexConfig(content);
   });
 
+  // Settings.json handler for Qoder
+  ipcMain.handle('config:getQoderSettings', async () => {
+    return configService.getQoderSettings();
+  });
+
+  ipcMain.handle('config:setQoderSettings', async (_, settings: Record<string, unknown>) => {
+    await configService.setQoderSettings(settings);
+  });
+
   // Conversation handlers
-  ipcMain.handle('conversation:create', async (_, cliType: 'claude' | 'copilot' | 'codex', sessionId: string, title?: string) => {
+  ipcMain.handle('conversation:create', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', sessionId: string, title?: string) => {
     return conversationService.create(cliType, sessionId, title);
   });
 

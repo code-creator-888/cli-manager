@@ -15,18 +15,20 @@ interface ConversationMessage {
 }
 
 interface ConversationFilter {
-  cliType?: 'claude' | 'copilot' | 'codex';
+  cliType?: 'claude' | 'copilot' | 'codex' | 'qoder';
   favorite?: boolean;
   limit?: number;
   offset?: number;
 }
+
+type CLITypes = 'claude' | 'copilot' | 'codex' | 'qoder';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('cliManagerAPI', {
   // Terminal operations
   terminal: {
-    create: (cliType: 'claude' | 'copilot' | 'codex') =>
+    create: (cliType: CLITypes) =>
       ipcRenderer.invoke('terminal:create', cliType),
 
     write: (sessionId: string, data: string) =>
@@ -53,7 +55,7 @@ contextBridge.exposeInMainWorld('cliManagerAPI', {
 
   // Status monitoring
   status: {
-    get: (cliType: 'claude' | 'copilot' | 'codex') =>
+    get: (cliType: CLITypes) =>
       ipcRenderer.invoke('status:get', cliType),
 
     checkAll: () =>
@@ -62,16 +64,16 @@ contextBridge.exposeInMainWorld('cliManagerAPI', {
 
   // Configuration management
   config: {
-    get: (cliType: 'claude' | 'copilot' | 'codex') =>
+    get: (cliType: CLITypes) =>
       ipcRenderer.invoke('config:get', cliType),
 
-    set: (cliType: 'claude' | 'copilot' | 'codex', config: Record<string, unknown>) =>
+    set: (cliType: CLITypes, config: Record<string, unknown>) =>
       ipcRenderer.invoke('config:set', cliType, config),
 
-    setEnvVar: (cliType: 'claude' | 'copilot' | 'codex', key: string, value: string) =>
+    setEnvVar: (cliType: CLITypes, key: string, value: string) =>
       ipcRenderer.invoke('config:setEnvVar', cliType, key, value),
 
-    deleteEnvVar: (cliType: 'claude' | 'copilot' | 'codex', key: string) =>
+    deleteEnvVar: (cliType: CLITypes, key: string) =>
       ipcRenderer.invoke('config:deleteEnvVar', cliType, key),
 
     // Settings.json for Claude
@@ -94,11 +96,18 @@ contextBridge.exposeInMainWorld('cliManagerAPI', {
 
     setCodexConfig: (content: string) =>
       ipcRenderer.invoke('config:setCodexConfig', content),
+
+    // Settings.json for Qoder
+    getQoderSettings: () =>
+      ipcRenderer.invoke('config:getQoderSettings'),
+
+    setQoderSettings: (settings: Record<string, unknown>) =>
+      ipcRenderer.invoke('config:setQoderSettings', settings),
   },
 
   // Conversation management
   conversation: {
-    create: (cliType: 'claude' | 'copilot' | 'codex', sessionId: string, title?: string) =>
+    create: (cliType: CLITypes, sessionId: string, title?: string) =>
       ipcRenderer.invoke('conversation:create', cliType, sessionId, title),
 
     get: (id: string) =>

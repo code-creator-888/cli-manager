@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 
-export type CLIType = 'claude' | 'copilot' | 'codex';
+export type CLIType = 'claude' | 'copilot' | 'codex' | 'qoder';
 
 export interface CLIConfig {
   cliType: CLIType;
@@ -21,6 +21,7 @@ export class ConfigService {
         ? path.join(process.env.APPDATA || '', 'github-copilot')
         : path.join(os.homedir(), '.config', 'github-copilot'),
       codex: path.join(os.homedir(), '.codex'),
+      qoder: path.join(os.homedir(), '.qoder'),
     };
   }
 
@@ -84,6 +85,26 @@ export class ConfigService {
   async setCodexConfig(content: string): Promise<void> {
     const configPath = this.getCodexConfigPath();
     await this.writeFileSafely(configPath, content);
+  }
+
+  // Settings.json methods for Qoder
+  private getQoderSettingsPath(): string {
+    return path.join(this.configPaths.qoder, 'settings.json');
+  }
+
+  async getQoderSettings(): Promise<{ path: string; content: Record<string, unknown> }> {
+    const settingsPath = this.getQoderSettingsPath();
+    try {
+      const content = await fs.promises.readFile(settingsPath, 'utf-8');
+      return { path: settingsPath, content: JSON.parse(content) };
+    } catch {
+      return { path: settingsPath, content: {} };
+    }
+  }
+
+  async setQoderSettings(settings: Record<string, unknown>): Promise<void> {
+    const settingsPath = this.getQoderSettingsPath();
+    await this.writeFileSafely(settingsPath, JSON.stringify(settings, null, 2));
   }
 
   async get(cliType: CLIType): Promise<CLIConfig> {
