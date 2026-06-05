@@ -1,0 +1,23 @@
+electron/services/qoder-cli.ts
+  fe0c331ea22a21dd 1-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.22",
+  "base_commit_sha": "bf7ac386cdee94be16a97dfa5bf5db39a94350a9",
+  "prompts": {
+    "fe0c331ea22a21dd": {
+      "agent_id": {
+        "tool": "qoder",
+        "id": "1b828321-2527-4abf-93ae-5e225e2763c9",
+        "model": "qoder-model"
+      },
+      "human_author": "liuhw8",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 145,
+      "overriden_lines": 0
+    }
+  }
+}
