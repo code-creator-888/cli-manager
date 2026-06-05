@@ -1,0 +1,51 @@
+electron/services/terminal.ts
+  fe0c331ea22a21dd 9,32
+src/components/ConfigPanel/ConfigPanel.tsx
+  fe0c331ea22a21dd 12-13,37-40,59-60,77-80,82
+src/components/Layout/Sidebar.tsx
+  fe0c331ea22a21dd 22-27,44,124-146
+src/stores/index.ts
+  fe0c331ea22a21dd 40
+src/types/index.ts
+  fe0c331ea22a21dd 2
+src/types/window.d.ts
+  fe0c331ea22a21dd 7,15,19-23,26,29,32-34,37
+electron/preload.ts
+  fe0c331ea22a21dd 18,24-25,31,58,67,70,73,76,99-105,110
+tailwind.config.js
+  fe0c331ea22a21dd 16-17
+electron/services/config.ts
+  fe0c331ea22a21dd 5,24,90-109
+src/components/Dashboard/Dashboard.tsx
+  fe0c331ea22a21dd 9,15,44,56,159,175-178,184,189,195,214-218
+electron/services/conversation-parser.ts
+  fe0c331ea22a21dd 3,59
+src/components/Layout/Header.tsx
+  fe0c331ea22a21dd 33-34
+src/components/Terminal/TerminalPanel.tsx
+  fe0c331ea22a21dd 28,184-193
+electron/services/conversation.ts
+  fe0c331ea22a21dd 4,254-255,261-262,265
+electron/main.ts
+  fe0c331ea22a21dd 8,17,28,31-32,95,103,130,133,139,143,145,149,153,157,161,192-200,202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.22",
+  "base_commit_sha": "f8de6a09b01e69d968394ef4d94e5e71515002fc",
+  "prompts": {
+    "fe0c331ea22a21dd": {
+      "agent_id": {
+        "tool": "qoder",
+        "id": "1b828321-2527-4abf-93ae-5e225e2763c9",
+        "model": "qoder-model"
+      },
+      "human_author": "liuhw8",
+      "messages": [],
+      "total_additions": 314,
+      "total_deletions": 47,
+      "accepted_lines": 312,
+      "overriden_lines": 0
+    }
+  }
+}
