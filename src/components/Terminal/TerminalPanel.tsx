@@ -239,11 +239,14 @@ export const TerminalPanel: React.FC = () => {
             key={session.id}
             className="absolute inset-0"
             style={{
-              display: currentSession?.id === session.id ? 'block' : 'none'
+              visibility: currentSession?.id === session.id ? 'visible' : 'hidden',
+              pointerEvents: currentSession?.id === session.id ? 'auto' : 'none',
+              zIndex: currentSession?.id === session.id ? 1 : 0,
             }}
           >
             <TerminalView
               sessionId={session.id}
+              isActive={currentSession?.id === session.id}
               onData={(data) => handleTerminalData(session.id, data)}
               onResize={(cols, rows) => handleResize(session.id, cols, rows)}
             />

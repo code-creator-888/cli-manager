@@ -6,18 +6,39 @@ import 'xterm/css/xterm.css';
 
 interface TerminalViewProps {
   sessionId: string;
+  isActive?: boolean;
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({
   sessionId,
+  isActive = false,
   onData,
   onResize,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+
+  const syncTerminalSize = () => {
+    if (!containerRef.current || !fitAddonRef.current || !xtermRef.current) return;
+    if (containerRef.current.clientWidth === 0 || containerRef.current.clientHeight === 0) return;
+
+    try {
+      fitAddonRef.current.fit();
+      const dims = fitAddonRef.current.proposeDimensions();
+      if (dims) {
+        onResize?.(dims.cols, dims.rows);
+      }
+
+      if (xtermRef.current.rows > 0) {
+        xtermRef.current.refresh(0, xtermRef.current.rows - 1);
+      }
+    } catch (e) {
+      // Ignore resize errors
+    }
+  };
 
   // Initialize terminal - runs once on mount, cleanup on unmount
   useEffect(() => {
@@ -67,7 +88,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Fit after a small delay to ensure container is rendered
     requestAnimationFrame(() => {
-      fitAddon.fit();
+      syncTerminalSize();
     });
 
     xtermRef.current = xterm;
@@ -82,13 +103,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Handle window resize
     const handleWindowResize = () => {
-      if (fitAddonRef.current && xtermRef.current) {
-        try {
-          fitAddonRef.current.fit();
-        } catch (e) {
-          // Ignore
-        }
-      }
+      syncTerminalSize();
     };
     window.addEventListener('resize', handleWindowResize);
 
@@ -125,23 +140,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     if (!containerRef.current) return;
 
     const observer = new ResizeObserver(() => {
-      if (fitAddonRef.current && xtermRef.current) {
-        try {
-          fitAddonRef.current.fit();
-          const dims = fitAddonRef.current.proposeDimensions();
-          if (dims && window.cliManagerAPI) {
-            window.cliManagerAPI.terminal.resize(sessionId, dims.cols, dims.rows);
-          }
-        } catch (e) {
-          // Ignore resize errors
-        }
-      }
+      syncTerminalSize();
     });
 
     observer.observe(containerRef.current);
 
     return () => observer.disconnect();
-  }, [sessionId]);
+  }, [sessionId, onResize]);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    const rafId = requestAnimationFrame(() => {
+      syncTerminalSize();
+      requestAnimationFrame(() => {
+        syncTerminalSize();
+      });
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [isActive, sessionId, onResize]);
 
   return (
     <div
