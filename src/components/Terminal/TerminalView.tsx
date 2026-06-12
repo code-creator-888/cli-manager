@@ -20,20 +20,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const onResizeRef = useRef(onResize);
+  onResizeRef.current = onResize;
 
   const syncTerminalSize = () => {
     if (!containerRef.current || !fitAddonRef.current || !xtermRef.current) return;
     if (containerRef.current.clientWidth === 0 || containerRef.current.clientHeight === 0) return;
 
     try {
+      const xterm = xtermRef.current;
+      const buffer = xterm.buffer.active;
+      const wasAtBottom = buffer.viewportY >= buffer.length - xterm.rows;
+
       fitAddonRef.current.fit();
       const dims = fitAddonRef.current.proposeDimensions();
       if (dims) {
-        onResize?.(dims.cols, dims.rows);
+        onResizeRef.current?.(dims.cols, dims.rows);
       }
 
-      if (xtermRef.current.rows > 0) {
-        xtermRef.current.refresh(0, xtermRef.current.rows - 1);
+      if (xterm.rows > 0) {
+        xterm.refresh(0, xterm.rows - 1);
+      }
+
+      if (wasAtBottom) {
+        xterm.scrollToBottom();
       }
     } catch (e) {
       // Ignore resize errors
@@ -122,12 +132,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   useEffect(() => {
     if (!window.cliManagerAPI) return;
 
-    console.log('Setting up data listener for session:', sessionId);
-
     const cleanup = window.cliManagerAPI.terminal.onData(
       (sid: string, data: string) => {
         if (sid === sessionId && xtermRef.current) {
-          xtermRef.current.write(data);
+          const xterm = xtermRef.current;
+          const buffer = xterm.buffer.active;
+          const wasAtBottom = buffer.viewportY >= buffer.length - xterm.rows;
+
+          xterm.write(data);
+
+          if (wasAtBottom) {
+            requestAnimationFrame(() => {
+              xterm.scrollToBottom();
+            });
+          }
         }
       }
     );
@@ -146,7 +164,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     observer.observe(containerRef.current);
 
     return () => observer.disconnect();
-  }, [sessionId, onResize]);
+  }, [sessionId]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -159,7 +177,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [isActive, sessionId, onResize]);
+  }, [isActive, sessionId]);
 
   return (
     <div
