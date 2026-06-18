@@ -18,6 +18,8 @@ let qoderService: QoderCLIService;
 let configService: ConfigService;
 let conversationService: ConversationService;
 
+const devServerPort = process.env.CLI_MANAGER_DEV_PORT || '5173';
+const devServerUrl = `http://localhost:${devServerPort}`;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 function getWindowIcon(): string | undefined {
@@ -57,7 +59,7 @@ function createWindow(): void {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL(devServerUrl);
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }

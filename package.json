@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "description": "CLI Manager - Claude CLI & Copilot CLI Desktop Management Tool",
   "main": "dist-electron/main.js",
+  "bin": {
+    "cli-manager-start": "bin/cli-manager-start.cjs"
+  },
   "scripts": {
     "ensure:electron": "node scripts/ensure-electron.cjs",
     "postinstall": "npm run ensure:electron && electron-rebuild -f -w better-sqlite3,node-pty",
+    "start:background": "node bin/cli-manager-start.cjs",
     "dev": "npm run ensure:electron && npm run build:electron && concurrently \"vite\" \"electron .\"",
     "dev:vite": "vite",
     "build": "npm run build:electron && vite build",

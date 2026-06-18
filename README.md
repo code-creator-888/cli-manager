@@ -59,6 +59,22 @@ npm run dev
 
 macOS 下也可以直接双击项目根目录的 `start-mac.command` 一键启动。
 
+#### 全局后台启动命令
+
+在项目根目录执行一次：
+
+```bash
+npm link
+```
+
+之后可以在任意目录后台启动 CLI Manager：
+
+```bash
+cli-manager-start
+```
+
+启动日志会写入 `~/.cli-manager/cli-manager-dev.log`，PID 会写入 `~/.cli-manager/cli-manager-dev.pid`。
+
 #### 构建产物
 
 ```bash
@@ -83,6 +99,7 @@ npm run package:linux
 
 ```bash
 npm run dev
+npm run start:background
 npm run build
 npm run build:electron
 npm run preview
@@ -169,6 +186,22 @@ npm install
 npm run dev
 ```
 
+#### Global background launcher
+
+Run this once in the project root:
+
+```bash
+npm link
+```
+
+Then start CLI Manager in the background from any directory:
+
+```bash
+cli-manager-start
+```
+
+Logs are written to `~/.cli-manager/cli-manager-dev.log`, and the PID is stored in `~/.cli-manager/cli-manager-dev.pid`.
+
 #### Build the app
 
 ```bash
@@ -193,6 +226,7 @@ npm run package:linux
 
 ```bash
 npm run dev
+npm run start:background
 npm run build
 npm run build:electron
 npm run preview
