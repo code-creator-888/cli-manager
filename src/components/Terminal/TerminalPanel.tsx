@@ -178,16 +178,6 @@ export const TerminalPanel: React.FC = () => {
       {/* CLI Type Tabs */}
       <div className="flex bg-bg-secondary border-b border-bg-tertiary">
         <button
-          onClick={() => useAppStore.getState().setActiveCLI('claude')}
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeCLI === 'claude'
-              ? 'bg-claude-primary text-white'
-              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-          }`}
-        >
-          Claude
-        </button>
-        <button
           onClick={() => useAppStore.getState().setActiveCLI('copilot')}
           className={`px-6 py-3 text-sm font-medium transition-colors ${
             activeCLI === 'copilot'
@@ -198,16 +188,6 @@ export const TerminalPanel: React.FC = () => {
           Copilot
         </button>
         <button
-          onClick={() => useAppStore.getState().setActiveCLI('codex')}
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeCLI === 'codex'
-              ? 'bg-codex-primary text-white'
-              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-          }`}
-        >
-          Codex
-        </button>
-        <button
           onClick={() => useAppStore.getState().setActiveCLI('qoder')}
           className={`px-6 py-3 text-sm font-medium transition-colors ${
             activeCLI === 'qoder'
@@ -216,6 +196,26 @@ export const TerminalPanel: React.FC = () => {
           }`}
         >
           Qoder
+        </button>
+        <button
+          onClick={() => useAppStore.getState().setActiveCLI('claude')}
+          className={`px-6 py-3 text-sm font-medium transition-colors ${
+            activeCLI === 'claude'
+              ? 'bg-claude-primary text-white'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+        >
+          Claude
+        </button>
+        <button
+          onClick={() => useAppStore.getState().setActiveCLI('codex')}
+          className={`px-6 py-3 text-sm font-medium transition-colors ${
+            activeCLI === 'codex'
+              ? 'bg-codex-primary text-white'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+        >
+          Codex
         </button>
       </div>
 

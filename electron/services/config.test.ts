@@ -23,15 +23,36 @@ afterEach(async () => {
 
 describe('ConfigService', () => {
   it('returns defaults only when config files are missing', async () => {
-    await expect(service.getSettings()).resolves.toEqual({
+    await expect(service.getSettings()).resolves.toMatchObject({
       path: path.join(tempDir, 'claude', 'settings.json'),
+      exists: false,
       content: {},
+      candidates: [
+        { path: path.join(tempDir, 'claude', 'settings.json'), exists: false },
+        { path: path.join(tempDir, 'claude', 'config.json'), exists: false },
+      ],
     });
 
-    await expect(service.getCodexConfig()).resolves.toEqual({
+    await expect(service.getCodexConfig()).resolves.toMatchObject({
       path: path.join(tempDir, 'codex', 'config.toml'),
+      exists: false,
       content: '',
     });
+  });
+
+  it('uses the first existing candidate path when loading and saving', async () => {
+    const fallbackPath = path.join(tempDir, 'copilot', 'config.json');
+    await fs.promises.mkdir(path.dirname(fallbackPath), { recursive: true });
+    await fs.promises.writeFile(fallbackPath, '{"existing":true}', 'utf-8');
+
+    await expect(service.getApps()).resolves.toMatchObject({
+      path: fallbackPath,
+      exists: true,
+      content: { existing: true },
+    });
+
+    await service.setApps({ updated: true });
+    await expect(fs.promises.readFile(fallbackPath, 'utf-8')).resolves.toBe(JSON.stringify({ updated: true }, null, 2));
   });
 
   it('throws on invalid JSON instead of silently returning an empty object', async () => {

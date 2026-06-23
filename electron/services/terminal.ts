@@ -98,6 +98,7 @@ export class TerminalService extends EventEmitter {
 
     const session = this.sessions.get(sessionId);
     if (session) {
+      session.parser.feedInput(data);
       session.pty.write(data);
       session.lastActivity = new Date();
     }

@@ -310,6 +310,12 @@ export class ConversationService {
     this.db!.prepare('DELETE FROM conversations WHERE id = ?').run(id);
   }
 
+  async deleteByCLI(cliType: CLIType): Promise<number> {
+    // CASCADE and search triggers will clean up messages and FTS rows.
+    const result = this.db!.prepare('DELETE FROM conversations WHERE cli_type = ?').run(cliType);
+    return result.changes;
+  }
+
   async toggleFavorite(id: string): Promise<void> {
     this.db!.prepare(`
       UPDATE conversations SET favorite = CASE WHEN favorite = 1 THEN 0 ELSE 1 END

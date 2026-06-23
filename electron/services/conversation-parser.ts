@@ -23,9 +23,11 @@ export class ConversationParser extends EventEmitter {
   private cliType: CLIType;
   private state: ParserState = 'idle';
   private buffer: string = '';
+  private inputBuffer: string = '';
   private currentContent: string = '';
   private currentToolName: string = '';
   private hasStartedConversation: boolean = false;
+  private lastUserInput: string | null = null;
 
   constructor(cliType: CLIType) {
     super();
@@ -35,14 +37,69 @@ export class ConversationParser extends EventEmitter {
   reset(): void {
     this.state = 'idle';
     this.buffer = '';
+    this.inputBuffer = '';
     this.currentContent = '';
     this.currentToolName = '';
     this.hasStartedConversation = false;
+    this.lastUserInput = null;
   }
 
   feed(data: string): void {
     this.buffer += data;
     this.processBuffer();
+  }
+
+  feedInput(data: string): void {
+    for (let index = 0; index < data.length; index += 1) {
+      const char = data[index];
+
+      if (char === '\x1b') {
+        index = this.skipTerminalControlSequence(data, index);
+        continue;
+      }
+
+      if (char === '\r' || char === '\n') {
+        this.emitBufferedInput();
+      } else if (char === '\u0003') {
+        this.inputBuffer = '';
+      } else if (char === '\u007f' || char === '\b') {
+        this.inputBuffer = this.inputBuffer.slice(0, -1);
+      } else if (char >= ' ' || char === '\t') {
+        this.inputBuffer += char;
+      }
+    }
+  }
+
+  private skipTerminalControlSequence(data: string, startIndex: number): number {
+    const sequenceType = data[startIndex + 1];
+
+    if (sequenceType === '[') {
+      for (let index = startIndex + 2; index < data.length; index += 1) {
+        const code = data.charCodeAt(index);
+        if (code >= 0x40 && code <= 0x7e) {
+          return index;
+        }
+      }
+      return data.length - 1;
+    }
+
+    if (sequenceType === ']') {
+      for (let index = startIndex + 2; index < data.length; index += 1) {
+        if (data[index] === '\x07') {
+          return index;
+        }
+        if (data[index] === '\x1b' && data[index + 1] === '\\') {
+          return index + 1;
+        }
+      }
+      return data.length - 1;
+    }
+
+    if (sequenceType === 'O') {
+      return Math.min(startIndex + 2, data.length - 1);
+    }
+
+    return Math.min(startIndex + 1, data.length - 1);
   }
 
   private processBuffer(): void {
@@ -56,7 +113,7 @@ export class ConversationParser extends EventEmitter {
   }
 
   private processLine(line: string): void {
-    if (this.cliType === 'claude' || this.cliType === 'qoder') {
+    if (this.cliType === 'claude') {
       this.processClaudeLine(line);
     } else {
       this.processCopilotLine(line);
@@ -69,6 +126,13 @@ export class ConversationParser extends EventEmitter {
 
     // Detect user input prompt (">" at beginning of line)
     if (trimmedLine.startsWith('>')) {
+      const userContent = trimmedLine.substring(1).trim();
+      if (userContent && this.isDuplicateUserEcho(userContent)) {
+        this.state = 'collecting_assistant';
+        this.currentContent = '';
+        return;
+      }
+
       // If we were collecting assistant content, emit it first
       if (this.state === 'collecting_assistant' && this.currentContent.trim()) {
         this.emitMessage({
@@ -77,18 +141,8 @@ export class ConversationParser extends EventEmitter {
         });
         this.currentContent = '';
       }
-
-      // Switch to collecting user input
       this.state = 'collecting_user';
-
-      // Emit conversation start if this is the first user message
-      if (!this.hasStartedConversation) {
-        this.hasStartedConversation = true;
-        this.emit('conversationStart');
-      }
-
       // Extract the user content (remove the "> " prefix)
-      const userContent = trimmedLine.substring(1).trim();
       if (userContent) {
         this.currentContent += (this.currentContent ? '\n' : '') + userContent;
       }
@@ -156,10 +210,6 @@ export class ConversationParser extends EventEmitter {
         // Check what's next
         if (trimmedLine.startsWith('>')) {
           this.state = 'collecting_user';
-          if (!this.hasStartedConversation) {
-            this.hasStartedConversation = true;
-            this.emit('conversationStart');
-          }
         } else {
           this.state = 'collecting_assistant';
         }
@@ -190,10 +240,6 @@ export class ConversationParser extends EventEmitter {
           this.currentContent = '';
         }
         this.state = 'collecting_user';
-        if (!this.hasStartedConversation) {
-          this.hasStartedConversation = true;
-          this.emit('conversationStart');
-        }
         return;
       }
 
@@ -228,8 +274,13 @@ export class ConversationParser extends EventEmitter {
     const line = this.stripAnsi(rawLine);
     const trimmedLine = line.trim();
 
-    // Detect user message
-    if (trimmedLine.toLowerCase().startsWith('user:')) {
+    const labelledUserContent = this.getLabelledUserContent(trimmedLine);
+    if (labelledUserContent !== null) {
+      if (this.isDuplicateUserEcho(labelledUserContent)) {
+        this.state = 'collecting_assistant';
+        return;
+      }
+
       // If we were collecting assistant content, emit it first
       if (this.state === 'collecting_assistant' && this.currentContent.trim()) {
         this.emitMessage({
@@ -241,22 +292,14 @@ export class ConversationParser extends EventEmitter {
 
       this.state = 'collecting_user';
 
-      // Emit conversation start if this is the first user message
-      if (!this.hasStartedConversation) {
-        this.hasStartedConversation = true;
-        this.emit('conversationStart');
-      }
-
-      // Extract the user content
-      const userContent = trimmedLine.substring(5).trim();
-      if (userContent) {
-        this.currentContent = userContent;
+      if (labelledUserContent) {
+        this.currentContent = labelledUserContent;
       }
       return;
     }
 
-    // Detect copilot/assistant message
-    if (trimmedLine.toLowerCase().startsWith('copilot:')) {
+    const labelledAssistantContent = this.getLabelledAssistantContent(trimmedLine);
+    if (labelledAssistantContent !== null) {
       // If we were collecting user content, emit it first
       if (this.state === 'collecting_user' && this.currentContent.trim()) {
         this.emitMessage({
@@ -268,10 +311,8 @@ export class ConversationParser extends EventEmitter {
 
       this.state = 'collecting_assistant';
 
-      // Extract the assistant content
-      const assistantContent = trimmedLine.substring(8).trim();
-      if (assistantContent) {
-        this.currentContent = assistantContent;
+      if (labelledAssistantContent) {
+        this.currentContent = labelledAssistantContent;
       }
       return;
     }
@@ -302,20 +343,7 @@ export class ConversationParser extends EventEmitter {
         return;
       }
 
-      // Detect new user message
-      if (trimmedLine.toLowerCase().startsWith('user:')) {
-        if (this.currentContent.trim()) {
-          this.emitMessage({
-            role: 'assistant',
-            content: this.currentContent.trim(),
-          });
-          this.currentContent = '';
-        }
-        this.state = 'collecting_user';
-        if (!this.hasStartedConversation) {
-          this.hasStartedConversation = true;
-          this.emit('conversationStart');
-        }
+      if (this.isDuplicateUserEcho(trimmedLine) || this.isPromptOnlyLine(trimmedLine)) {
         return;
       }
 
@@ -327,7 +355,66 @@ export class ConversationParser extends EventEmitter {
   }
 
   private emitMessage(message: ParsedMessage): void {
+    if (message.role === 'user') {
+      this.ensureConversationStarted();
+      this.lastUserInput = message.content;
+    }
+
     this.emit('message', message);
+  }
+
+  private emitBufferedInput(): void {
+    const input = this.inputBuffer.trim();
+    this.inputBuffer = '';
+
+    if (!input) {
+      return;
+    }
+
+    if (this.state === 'collecting_assistant' && this.currentContent.trim()) {
+      this.emitMessage({
+        role: 'assistant',
+        content: this.currentContent.trim(),
+      });
+      this.currentContent = '';
+    }
+
+    this.emitMessage({
+      role: 'user',
+      content: input,
+    });
+    this.state = 'collecting_assistant';
+  }
+
+  private ensureConversationStarted(): void {
+    if (!this.hasStartedConversation) {
+      this.hasStartedConversation = true;
+      this.emit('conversationStart');
+    }
+  }
+
+  private getLabelledUserContent(line: string): string | null {
+    const match = line.match(/^(?:user|you)\s*:\s*(.*)$/i);
+    return match ? match[1].trim() : null;
+  }
+
+  private getLabelledAssistantContent(line: string): string | null {
+    const match = line.match(/^(?:copilot|github copilot|codex|qoder|assistant)\s*:\s*(.*)$/i);
+    return match ? match[1].trim() : null;
+  }
+
+  private isDuplicateUserEcho(line: string): boolean {
+    if (!this.lastUserInput) {
+      return false;
+    }
+
+    const promptMatch = line.match(/^[>›]\s*(.*)$/);
+    const normalizedLine = (promptMatch ? promptMatch[1] : line).trim();
+    return normalizedLine === this.lastUserInput;
+  }
+
+  private isPromptOnlyLine(line: string): boolean {
+    return /^[>›?]\s*$/.test(line);
   }
 
   private stripAnsi(str: string): string {
@@ -340,6 +427,14 @@ export class ConversationParser extends EventEmitter {
 
   // Flush any remaining content
   flush(): void {
+    if (this.buffer.trim()) {
+      const remaining = this.buffer;
+      this.buffer = '';
+      this.processLine(remaining);
+    }
+
+    this.emitBufferedInput();
+
     if (this.currentContent.trim()) {
       if (this.state === 'collecting_assistant') {
         this.emitMessage({

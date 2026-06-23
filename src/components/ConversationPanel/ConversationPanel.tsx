@@ -4,15 +4,18 @@ import { ConversationWithMessages } from '../../types';
 import { MessageBubble } from './MessageBubble';
 
 export const ConversationPanel: React.FC = () => {
-  const { activeCLI, conversations, setActiveConversation, setConversations, removeConversation, setConversationMessages, addNotification } = useAppStore();
+  const { activeCLI, conversations, setActiveConversation, setConversations, removeConversation, removeConversationsForCLI, setConversationMessages, addNotification } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showFavorites, setShowFavorites] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<ConversationWithMessages | null>(null);
+  const [loadingConversationId, setLoadingConversationId] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadConversationsRef = useRef<() => void>(() => undefined);
+  const detailsRequestRef = useRef(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -21,6 +24,11 @@ export const ConversationPanel: React.FC = () => {
 
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    setSelectedConversation(null);
+    setActiveConversation(null);
+  }, [activeCLI, setActiveConversation]);
 
   // Subscribe to conversation events
   useEffect(() => {
@@ -93,9 +101,11 @@ export const ConversationPanel: React.FC = () => {
 
   const loadConversationDetails = async (id: string) => {
     if (!window.cliManagerAPI) return;
+    const requestId = ++detailsRequestRef.current;
+    setLoadingConversationId(id);
     try {
       const result = await window.cliManagerAPI.conversation.getWithMessages(id);
-      if (result) {
+      if (requestId === detailsRequestRef.current && result) {
         setSelectedConversation(result);
         setActiveConversation(id);
         setConversationMessages(id, result.messages);
@@ -106,6 +116,10 @@ export const ConversationPanel: React.FC = () => {
         type: 'error',
         message: `Failed to load conversation details: ${e instanceof Error ? e.message : String(e)}`,
       });
+    } finally {
+      if (requestId === detailsRequestRef.current) {
+        setLoadingConversationId(null);
+      }
     }
   };
 
@@ -146,6 +160,40 @@ export const ConversationPanel: React.FC = () => {
     }
   };
 
+  const clearCurrentCLIConversations = async () => {
+    if (!window.cliManagerAPI || isClearing) return;
+
+    const label = cliLabel(activeCLI);
+    const confirmed = typeof window.confirm === 'function'
+      ? window.confirm(`Clear all ${label} conversations? This cannot be undone.`)
+      : true;
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      const deletedCount = await window.cliManagerAPI.conversation.deleteByCLI(activeCLI);
+      removeConversationsForCLI(activeCLI);
+      setSelectedConversation(null);
+      setActiveConversation(null);
+      addNotification({
+        type: 'success',
+        message: `Cleared ${deletedCount} ${label} conversation${deletedCount === 1 ? '' : 's'}.`,
+      });
+      await loadConversations();
+    } catch (e) {
+      console.error('Failed to clear conversations:', e);
+      addNotification({
+        type: 'error',
+        message: `Failed to clear ${label} conversations: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const formatDate = (date: Date) => {
     const d = new Date(date);
     const now = new Date();
@@ -166,12 +214,32 @@ export const ConversationPanel: React.FC = () => {
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
 
+  const cliLabel = (cliType: typeof activeCLI) => {
+    if (cliType === 'claude') return 'Claude';
+    if (cliType === 'copilot') return 'Copilot';
+    if (cliType === 'codex') return 'Codex';
+    return 'Qoder';
+  };
+
   return (
     <div className="h-full flex bg-bg-primary">
       {/* Conversation List */}
       <div className={`flex flex-col border-r border-bg-tertiary ${selectedConversation ? 'w-80' : 'flex-1'}`}>
         {/* Search and Filter */}
         <div className="p-4 bg-bg-secondary border-b border-bg-tertiary">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium text-text-primary">{cliLabel(activeCLI)} Conversations</h2>
+              <p className="text-xs text-text-secondary">History is scoped to the active CLI.</p>
+            </div>
+            <button
+              onClick={clearCurrentCLIConversations}
+              disabled={isClearing || conversationList.length === 0}
+              className="rounded-lg border border-red-500/40 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isClearing ? 'Clearing...' : `Clear ${cliLabel(activeCLI)}`}
+            </button>
+          </div>
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <svg
@@ -186,8 +254,17 @@ export const ConversationPanel: React.FC = () => {
                 placeholder="Search conversations..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-bg-tertiary text-text-primary pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full bg-bg-tertiary text-text-primary pl-10 pr-9 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
             </div>
             <button
               onClick={() => setShowFavorites(!showFavorites)}
@@ -206,6 +283,12 @@ export const ConversationPanel: React.FC = () => {
 
         {/* List */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {!isLoading && conversationList.length > 0 && (
+            <div className="border-b border-bg-tertiary px-4 py-2 text-xs text-text-secondary">
+              {conversationList.length} conversation{conversationList.length === 1 ? '' : 's'}
+              {debouncedSearch ? ` matching "${debouncedSearch}"` : ''}
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-text-secondary">Loading conversations...</div>
@@ -223,7 +306,11 @@ export const ConversationPanel: React.FC = () => {
               {conversationList.map((conv) => (
                 <div
                   key={conv.id}
-                  onClick={() => loadConversationDetails(conv.id)}
+                  onClick={() => {
+                    if (loadingConversationId !== conv.id) {
+                      loadConversationDetails(conv.id);
+                    }
+                  }}
                   className={`p-4 hover:bg-bg-secondary/50 transition-colors cursor-pointer ${
                     selectedConversation?.id === conv.id ? 'bg-bg-secondary/70' : ''
                   }`}
@@ -249,11 +336,28 @@ export const ConversationPanel: React.FC = () => {
                         <span className="text-text-primary font-medium text-sm truncate">
                           {conv.title || 'Untitled Conversation'}
                         </span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          conv.cliType === 'claude'
+                            ? 'bg-claude-primary/20 text-claude-secondary'
+                            : conv.cliType === 'copilot'
+                            ? 'bg-copilot-primary/20 text-copilot-secondary'
+                            : conv.cliType === 'codex'
+                            ? 'bg-codex-primary/20 text-codex-secondary'
+                            : 'bg-qoder-primary/20 text-qoder-secondary'
+                        }`}>
+                          {cliLabel(conv.cliType)}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-text-secondary">
                         <span>{formatDate(conv.updatedAt)}</span>
                         <span>•</span>
                         <span>{conv.messageCount} messages</span>
+                        {loadingConversationId === conv.id && (
+                          <>
+                            <span>•</span>
+                            <span>Loading...</span>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -297,6 +401,9 @@ export const ConversationPanel: React.FC = () => {
               </button>
             </div>
             <div className="flex items-center gap-4 mt-2 text-xs text-text-secondary">
+              <span>
+                {cliLabel(selectedConversation.cliType)}
+              </span>
               <span>
                 Created: {new Date(selectedConversation.createdAt).toLocaleString()}
               </span>

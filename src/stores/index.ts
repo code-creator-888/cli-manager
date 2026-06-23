@@ -28,12 +28,13 @@ interface AppState {
   addConversation: (conversation: Conversation) => void;
   updateConversation: (conversationId: string, updates: Partial<Conversation>) => void;
   removeConversation: (conversationId: string) => void;
+  removeConversationsForCLI: (cliType: CLIType) => void;
   setConversationMessages: (conversationId: string, messages: ConversationMessage[]) => void;
   addConversationMessage: (conversationId: string, message: ConversationMessage) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  activeCLI: 'claude',
+  activeCLI: 'copilot',
   activeSessionId: null,
   sessions: {},
   statuses: {
@@ -155,6 +156,28 @@ export const useAppStore = create<AppState>((set, get) => ({
         conversations: remainingConversations,
         conversationMessages: remainingMessages,
         activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId,
+      };
+    }),
+
+  removeConversationsForCLI: (cliType) =>
+    set((state) => {
+      const remainingConversations = { ...state.conversations };
+      const remainingMessages = { ...state.conversationMessages };
+      const removedIds = Object.values(state.conversations)
+        .filter((conversation) => conversation.cliType === cliType)
+        .map((conversation) => conversation.id);
+
+      for (const conversationId of removedIds) {
+        delete remainingConversations[conversationId];
+        delete remainingMessages[conversationId];
+      }
+
+      return {
+        conversations: remainingConversations,
+        conversationMessages: remainingMessages,
+        activeConversationId: state.activeConversationId && removedIds.includes(state.activeConversationId)
+          ? null
+          : state.activeConversationId,
       };
     }),
 

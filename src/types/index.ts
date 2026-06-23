@@ -10,6 +10,8 @@ export type {
   AppNotification,
   CLIConfig,
   CLIManagerAPI,
+  ConfigFileCandidate,
+  ConfigFileResult,
   CLIStatus,
   CLIType,
   ConfigAPI,
@@ -17,6 +19,7 @@ export type {
   ConversationAPI,
   ConversationFilter,
   ConversationMessage,
+  ConversationStats,
   ConversationWithMessages,
   StatusAPI,
   TerminalAPI,
@@ -39,4 +42,5 @@ export interface AppState {
   updateStatus: (cliType: SharedCLIType, status: SharedCLIStatus) => void;
   addNotification: (notification: Omit<SharedAppNotification, 'id' | 'createdAt'>) => string;
   removeNotification: (id: string) => void;
+  removeConversationsForCLI: (cliType: SharedCLIType) => void;
 }

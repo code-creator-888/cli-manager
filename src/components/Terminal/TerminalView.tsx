@@ -121,6 +121,50 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       onDataRef.current?.(data);
     });
 
+    const copySelection = () => {
+      const selection = xterm.getSelection();
+      if (selection) {
+        window.cliManagerAPI?.clipboard.writeText(selection);
+        xterm.clearSelection();
+      }
+    };
+
+    const pasteClipboard = () => {
+      const text = window.cliManagerAPI?.clipboard.readText();
+      if (text) {
+        onDataRef.current?.(text);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const shortcutKey = event.metaKey || (event.ctrlKey && !event.altKey);
+      if (!shortcutKey) return;
+
+      const key = event.key.toLowerCase();
+      if (key === 'c' && xterm.hasSelection()) {
+        event.preventDefault();
+        copySelection();
+      } else if (key === 'v') {
+        event.preventDefault();
+        pasteClipboard();
+      }
+    };
+
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      if (xterm.hasSelection()) {
+        copySelection();
+      } else {
+        pasteClipboard();
+      }
+    };
+
+    xterm.attachCustomKeyEventHandler((event) => {
+      handleKeyDown(event);
+      return !event.defaultPrevented;
+    });
+    containerRef.current.addEventListener('contextmenu', handleContextMenu);
+
     // Handle window resize
     const handleWindowResize = () => {
       syncTerminalSize();
@@ -131,6 +175,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     return () => {
       console.log('Cleaning up terminal for session:', sessionId);
       window.removeEventListener('resize', handleWindowResize);
+      containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
       dataDisposable.dispose();
       xterm.dispose();
       if (flushFrameRef.current !== null) {

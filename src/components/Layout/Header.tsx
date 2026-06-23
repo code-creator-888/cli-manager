@@ -7,10 +7,9 @@ interface HeaderProps {
 }
 
 const viewTitles: Record<SidebarView, string> = {
-  dashboard: 'Dashboard',
   terminal: 'Terminal',
   conversation: 'Conversations',
-  config: 'Configuration',
+  dashboard: 'Dashboard',
 };
 
 export const Header: React.FC<HeaderProps> = ({ activeView }) => {

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar, Header } from './components/Layout';
 import { TerminalPanel } from './components/Terminal';
-import { ConfigPanel } from './components/ConfigPanel';
 import { ConversationPanel } from './components/ConversationPanel';
 import { Dashboard } from './components/Dashboard';
 import { NotificationCenter } from './components/Notifications';
@@ -9,7 +8,7 @@ import { useAppStore } from './stores';
 import { SidebarView } from './components/Layout/Sidebar';
 
 const App: React.FC = () => {
-  const [activeView, setActiveView] = useState<SidebarView>('dashboard');
+  const [activeView, setActiveView] = useState<SidebarView>('terminal');
   const { updateStatus, addNotification } = useAppStore();
 
   // Check CLI status
@@ -63,14 +62,6 @@ const App: React.FC = () => {
           overflow: 'hidden'
         }}>
           <ConversationPanel />
-        </div>
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: activeView === 'config' ? 'flex' : 'none',
-          overflow: 'hidden'
-        }}>
-          <ConfigPanel />
         </div>
       </div>
     );

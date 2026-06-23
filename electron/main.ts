@@ -143,11 +143,25 @@ function setupAppMenu(): void {
     {
       label: app.name,
       submenu: [
+        { role: 'about' },
+        { type: 'separator' },
         {
           label: '退出 CLI Manager',
           accelerator: 'CmdOrCtrl+Q',
           click: () => quitApp(),
         },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' },
       ],
     },
   ]));
@@ -321,6 +335,10 @@ function setupIPCHandlers(): void {
     await conversationService.delete(assertNonEmptyString(id, 'id'));
   });
 
+  ipcMain.handle('conversation:deleteByCLI', async (_, cliType: unknown) => {
+    return conversationService.deleteByCLI(assertCLIType(cliType));
+  });
+
   ipcMain.handle('conversation:toggleFavorite', async (_, id: unknown) => {
     await conversationService.toggleFavorite(assertNonEmptyString(id, 'id'));
   });
@@ -333,17 +351,14 @@ function setupIPCHandlers(): void {
     return conversationService.getActiveConversationForSession(assertNonEmptyString(sessionId, 'sessionId'));
   });
 
+  ipcMain.handle('conversation:getStats', async () => {
+    return conversationService.getStats();
+  });
+
   // Listen for conversation events from terminal service
-  terminalService.on('conversation:start', async (sessionId: string) => {
-    const session = terminalService.getSession(sessionId);
-    if (!session) return;
-
-    // Create a new conversation for this session
-    const conversationId = await conversationService.create(session.cliType, sessionId);
-    terminalService.setConversationId(sessionId, conversationId);
-
-    // Notify renderer
-    mainWindow?.webContents.send('conversation:created', sessionId, conversationId);
+  terminalService.on('conversation:start', () => {
+    // Conversation records are created lazily when the first real message arrives.
+    // Creating on start alone can leave empty "Untitled Conversation" rows.
   });
 
   terminalService.on('conversation:message', async (sessionId: string, message) => {

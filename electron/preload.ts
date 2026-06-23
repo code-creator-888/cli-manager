@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { clipboard, contextBridge, ipcRenderer } from 'electron';
 import type { CLIManagerAPI, CLIType, ConversationFilter, ConversationMessage } from '../shared/ipc';
 
 // Expose protected methods that allow the renderer process to use
@@ -6,6 +6,11 @@ import type { CLIManagerAPI, CLIType, ConversationFilter, ConversationMessage } 
 const api: CLIManagerAPI = {
   app: {
     quit: () => ipcRenderer.send('app:quit'),
+  },
+
+  clipboard: {
+    readText: () => clipboard.readText(),
+    writeText: (text: string) => clipboard.writeText(text),
   },
 
   // Terminal operations
@@ -110,6 +115,9 @@ const api: CLIManagerAPI = {
     delete: (id: string) =>
       ipcRenderer.invoke('conversation:delete', id),
 
+    deleteByCLI: (cliType: CLIType) =>
+      ipcRenderer.invoke('conversation:deleteByCLI', cliType),
+
     toggleFavorite: (id: string) =>
       ipcRenderer.invoke('conversation:toggleFavorite', id),
 
@@ -118,6 +126,9 @@ const api: CLIManagerAPI = {
 
     getActiveForSession: (sessionId: string) =>
       ipcRenderer.invoke('conversation:getActiveForSession', sessionId),
+
+    getStats: () =>
+      ipcRenderer.invoke('conversation:getStats'),
 
     onCreated: (callback: (sessionId: string, conversationId: string) => void) => {
       const handler = (_: unknown, sessionId: string, conversationId: string) => callback(sessionId, conversationId);

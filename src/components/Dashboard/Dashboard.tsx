@@ -1,26 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '../../stores';
 import { canCreateTerminalSession, getTerminalSessionLimitMessage } from '../../utils/sessionLimits';
-import type { CLIType } from '../../types';
-
-interface Stats {
-  total: number;
-  claude: number;
-  copilot: number;
-  codex: number;
-  qoder: number;
-  favorites: number;
-}
+import type { CLIType, ConversationStats } from '../../types';
 
 export const Dashboard: React.FC = () => {
   const { statuses, updateStatus, addSession, setActiveCLI, setActiveSession, sessions, addNotification } = useAppStore();
-  const [stats, setStats] = useState<Stats>({ total: 0, claude: 0, copilot: 0, codex: 0, qoder: 0, favorites: 0 });
+  const [stats, setStats] = useState<ConversationStats>({ total: 0, claude: 0, copilot: 0, codex: 0, qoder: 0, favorites: 0 });
   const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
+  const [isStatusLoading, setIsStatusLoading] = useState(true);
 
   useEffect(() => {
     const checkStatus = async () => {
       if (window.cliManagerAPI) {
         try {
+          setIsStatusLoading(true);
           const statusList = await window.cliManagerAPI.status.checkAll();
           statusList.forEach((status) => {
             updateStatus(status.cliType, status);
@@ -31,6 +25,8 @@ export const Dashboard: React.FC = () => {
             type: 'error',
             message: `Failed to check CLI status: ${e instanceof Error ? e.message : String(e)}`,
           });
+        } finally {
+          setIsStatusLoading(false);
         }
       }
     };
@@ -41,32 +37,61 @@ export const Dashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, [updateStatus, addNotification]);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      if (window.cliManagerAPI) {
-        try {
-          const conversations = await window.cliManagerAPI.conversation.list({ limit: 1000 });
-          const favorites = conversations.filter((conversation) => conversation.favorite).length;
-          setStats({
-            total: conversations.length,
-            claude: conversations.filter((conversation) => conversation.cliType === 'claude').length,
-            copilot: conversations.filter((conversation) => conversation.cliType === 'copilot').length,
-            codex: conversations.filter((conversation) => conversation.cliType === 'codex').length,
-            qoder: conversations.filter((conversation) => conversation.cliType === 'qoder').length,
-            favorites,
-          });
-        } catch (e) {
-          console.error('Failed to fetch stats:', e);
-          addNotification({
-            type: 'error',
-            message: `Failed to fetch dashboard stats: ${e instanceof Error ? e.message : String(e)}`,
-          });
-        }
-      }
-    };
-
-    fetchStats();
+  const fetchStats = useCallback(async () => {
+    if (!window.cliManagerAPI) return;
+    setIsStatsLoading(true);
+    try {
+      const nextStats = await window.cliManagerAPI.conversation.getStats();
+      setStats(nextStats);
+    } catch (e) {
+      console.error('Failed to fetch stats:', e);
+      addNotification({
+        type: 'error',
+        message: `Failed to fetch dashboard stats: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    } finally {
+      setIsStatsLoading(false);
+    }
   }, [addNotification]);
+
+  useEffect(() => {
+    fetchStats();
+
+    if (!window.cliManagerAPI) return;
+    const unsubscribeCreated = window.cliManagerAPI.conversation.onCreated(() => {
+      fetchStats();
+    });
+    const unsubscribeMessage = window.cliManagerAPI.conversation.onMessage(() => {
+      fetchStats();
+    });
+
+    return () => {
+      unsubscribeCreated();
+      unsubscribeMessage();
+    };
+  }, [fetchStats]);
+
+  const refreshDashboard = async () => {
+    if (window.cliManagerAPI) {
+      try {
+        setIsStatusLoading(true);
+        const statusList = await window.cliManagerAPI.status.checkAll();
+        statusList.forEach((status) => {
+          updateStatus(status.cliType, status);
+        });
+      } catch (e) {
+        console.error('Failed to refresh status:', e);
+        addNotification({
+          type: 'error',
+          message: `Failed to refresh CLI status: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      } finally {
+        setIsStatusLoading(false);
+      }
+    }
+
+    await fetchStats();
+  };
 
   const openTerminal = async (cliType: CLIType) => {
     if (!window.cliManagerAPI) return;
@@ -155,7 +180,7 @@ export const Dashboard: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="text-text-secondary text-sm">Checking status...</div>
+        <div className="text-text-secondary text-sm">{isStatusLoading ? 'Checking status...' : 'No status available'}</div>
       )}
       <div className={`mt-4 h-1 rounded ${color}`} />
     </div>
@@ -170,7 +195,7 @@ export const Dashboard: React.FC = () => {
       <div className="flex items-center gap-3">
         <div className="text-2xl">{icon}</div>
         <div>
-          <div className="text-2xl font-bold text-text-primary">{value}</div>
+          <div className="text-2xl font-bold text-text-primary">{isStatsLoading ? '…' : value}</div>
           <div className="text-text-secondary text-sm">{title}</div>
         </div>
       </div>
@@ -179,40 +204,49 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar p-6">
-      <h2 className="text-xl font-semibold text-text-primary mb-6">Dashboard</h2>
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-text-primary">Dashboard</h2>
+        <button
+          onClick={refreshDashboard}
+          disabled={isStatsLoading || isStatusLoading}
+          className="rounded-lg bg-bg-secondary px-3 py-2 text-sm text-text-secondary transition-colors hover:text-text-primary disabled:opacity-50"
+        >
+          {isStatsLoading || isStatusLoading ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
 
       {/* Status Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatusCard
-          title="Claude CLI"
-          status={statuses.claude}
-          color="bg-claude-primary"
-        />
         <StatusCard
           title="Copilot CLI"
           status={statuses.copilot}
           color="bg-copilot-primary"
         />
         <StatusCard
-          title="Codex CLI"
-          status={statuses.codex}
-          color="bg-codex-primary"
-        />
-        <StatusCard
           title="Qoder CLI"
           status={statuses.qoder}
           color="bg-qoder-primary"
+        />
+        <StatusCard
+          title="Claude CLI"
+          status={statuses.claude}
+          color="bg-claude-primary"
+        />
+        <StatusCard
+          title="Codex CLI"
+          status={statuses.codex}
+          color="bg-codex-primary"
         />
       </div>
 
       {/* Stats */}
       <h3 className="text-lg font-medium text-text-primary mb-4">History Statistics</h3>
       <div className="grid grid-cols-6 gap-4 mb-6">
-        <StatCard title="Total Commands" value={stats.total} icon="📊" />
-        <StatCard title="Claude Commands" value={stats.claude} icon="🤖" />
-        <StatCard title="Copilot Commands" value={stats.copilot} icon="✈️" />
-        <StatCard title="Codex Commands" value={stats.codex} icon="🔬" />
-        <StatCard title="Qoder Commands" value={stats.qoder} icon="⚡" />
+        <StatCard title="Total Conversations" value={stats.total} icon="📊" />
+        <StatCard title="Copilot Conversations" value={stats.copilot} icon="✈️" />
+        <StatCard title="Qoder Conversations" value={stats.qoder} icon="⚡" />
+        <StatCard title="Claude Conversations" value={stats.claude} icon="🤖" />
+        <StatCard title="Codex Conversations" value={stats.codex} icon="🔬" />
         <StatCard title="Favorites" value={stats.favorites} icon="⭐" />
       </div>
 
@@ -225,28 +259,28 @@ export const Dashboard: React.FC = () => {
       )}
       <div className="grid grid-cols-4 gap-4">
         <button
-          onClick={() => openTerminal('claude')}
-          className="bg-claude-primary/20 hover:bg-claude-primary/30 text-claude-secondary px-4 py-3 rounded-lg transition-colors"
-        >
-          Open Claude CLI
-        </button>
-        <button
           onClick={() => openTerminal('copilot')}
           className="bg-copilot-primary/20 hover:bg-copilot-primary/30 text-copilot-secondary px-4 py-3 rounded-lg transition-colors"
         >
           Open Copilot CLI
         </button>
         <button
-          onClick={() => openTerminal('codex')}
-          className="bg-codex-primary/20 hover:bg-codex-primary/30 text-codex-secondary px-4 py-3 rounded-lg transition-colors"
-        >
-          Open Codex CLI
-        </button>
-        <button
           onClick={() => openTerminal('qoder')}
           className="bg-qoder-primary/20 hover:bg-qoder-primary/30 text-qoder-secondary px-4 py-3 rounded-lg transition-colors"
         >
           Open Qoder CLI
+        </button>
+        <button
+          onClick={() => openTerminal('claude')}
+          className="bg-claude-primary/20 hover:bg-claude-primary/30 text-claude-secondary px-4 py-3 rounded-lg transition-colors"
+        >
+          Open Claude CLI
+        </button>
+        <button
+          onClick={() => openTerminal('codex')}
+          className="bg-codex-primary/20 hover:bg-codex-primary/30 text-codex-secondary px-4 py-3 rounded-lg transition-colors"
+        >
+          Open Codex CLI
         </button>
       </div>
     </div>

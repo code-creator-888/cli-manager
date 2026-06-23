@@ -1,14 +1,16 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import type { CLIConfig, CLIType } from '../../shared/ipc';
+import type { CLIConfig, CLIType, ConfigFileResult } from '../../shared/ipc';
 
 type ConfigPaths = Record<CLIType, string>;
 
 export class ConfigService {
   private configPaths: ConfigPaths;
+  private includeGlobalFallbacks: boolean;
 
   constructor(configPaths?: Partial<ConfigPaths>) {
+    this.includeGlobalFallbacks = !configPaths;
     const defaultConfigPaths: ConfigPaths = {
       claude: path.join(os.homedir(), '.claude'),
       copilot: os.platform() === 'win32'
@@ -26,63 +28,59 @@ export class ConfigService {
 
   // Settings file paths
   private getSettingsPath(): string {
-    return path.join(this.configPaths.claude, 'settings.json');
+    return this.getSettingsCandidates()[0];
   }
 
   private getAppsPath(): string {
-    return path.join(this.configPaths.copilot, 'apps.json');
+    return this.getAppsCandidates()[0];
   }
 
   // Settings.json methods for Claude
-  async getSettings(): Promise<{ path: string; content: Record<string, unknown> }> {
-    const settingsPath = this.getSettingsPath();
-    return { path: settingsPath, content: await this.readJsonFile(settingsPath, {}) };
+  async getSettings(): Promise<ConfigFileResult<Record<string, unknown>>> {
+    return this.getConfigFileResult(this.getSettingsCandidates(), (filePath) => this.readJsonFile(filePath, {}));
   }
 
   async setSettings(settings: Record<string, unknown>): Promise<void> {
-    const settingsPath = this.getSettingsPath();
+    const settingsPath = this.resolveCandidatePath(this.getSettingsCandidates());
     await this.writeFileSafely(settingsPath, JSON.stringify(settings, null, 2));
   }
 
   // Apps.json methods for Copilot
-  async getApps(): Promise<{ path: string; content: Record<string, unknown> }> {
-    const appsPath = this.getAppsPath();
-    return { path: appsPath, content: await this.readJsonFile(appsPath, {}) };
+  async getApps(): Promise<ConfigFileResult<Record<string, unknown>>> {
+    return this.getConfigFileResult(this.getAppsCandidates(), (filePath) => this.readJsonFile(filePath, {}));
   }
 
   async setApps(apps: Record<string, unknown>): Promise<void> {
-    const appsPath = this.getAppsPath();
+    const appsPath = this.resolveCandidatePath(this.getAppsCandidates());
     await this.writeFileSafely(appsPath, JSON.stringify(apps, null, 2));
   }
 
   // Config.json methods for Codex
   private getCodexConfigPath(): string {
     // Codex CLI 使用 config.toml 而不是 config.json
-    return path.join(this.configPaths.codex, 'config.toml');
+    return this.getCodexConfigCandidates()[0];
   }
 
-  async getCodexConfig(): Promise<{ path: string; content: string }> {
-    const configPath = this.getCodexConfigPath();
-    return { path: configPath, content: await this.readTextFile(configPath, '') };
+  async getCodexConfig(): Promise<ConfigFileResult<string>> {
+    return this.getConfigFileResult(this.getCodexConfigCandidates(), (filePath) => this.readTextFile(filePath, ''));
   }
 
   async setCodexConfig(content: string): Promise<void> {
-    const configPath = this.getCodexConfigPath();
+    const configPath = this.resolveCandidatePath(this.getCodexConfigCandidates());
     await this.writeFileSafely(configPath, content);
   }
 
   // Settings.json methods for Qoder
   private getQoderSettingsPath(): string {
-    return path.join(this.configPaths.qoder, 'settings.json');
+    return this.getQoderSettingsCandidates()[0];
   }
 
-  async getQoderSettings(): Promise<{ path: string; content: Record<string, unknown> }> {
-    const settingsPath = this.getQoderSettingsPath();
-    return { path: settingsPath, content: await this.readJsonFile(settingsPath, {}) };
+  async getQoderSettings(): Promise<ConfigFileResult<Record<string, unknown>>> {
+    return this.getConfigFileResult(this.getQoderSettingsCandidates(), (filePath) => this.readJsonFile(filePath, {}));
   }
 
   async setQoderSettings(settings: Record<string, unknown>): Promise<void> {
-    const settingsPath = this.getQoderSettingsPath();
+    const settingsPath = this.resolveCandidatePath(this.getQoderSettingsCandidates());
     await this.writeFileSafely(settingsPath, JSON.stringify(settings, null, 2));
   }
 
@@ -173,6 +171,71 @@ export class ConfigService {
 
   private isMissingFileError(error: unknown): boolean {
     return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+  }
+
+  private getSettingsCandidates(): string[] {
+    return this.uniquePaths([
+      path.join(this.configPaths.claude, 'settings.json'),
+      path.join(this.configPaths.claude, 'config.json'),
+      ...this.globalFallbacks(path.join(os.homedir(), '.claude.json')),
+    ]);
+  }
+
+  private getAppsCandidates(): string[] {
+    return this.uniquePaths([
+      path.join(this.configPaths.copilot, 'apps.json'),
+      path.join(this.configPaths.copilot, 'config.json'),
+      ...this.globalFallbacks(
+        path.join(os.homedir(), '.github-copilot', 'apps.json'),
+        path.join(os.homedir(), '.copilot', 'config.json')
+      ),
+    ]);
+  }
+
+  private getCodexConfigCandidates(): string[] {
+    return this.uniquePaths([
+      path.join(this.configPaths.codex, 'config.toml'),
+      path.join(this.configPaths.codex, 'config.json'),
+      ...this.globalFallbacks(path.join(os.homedir(), '.config', 'codex', 'config.toml')),
+    ]);
+  }
+
+  private getQoderSettingsCandidates(): string[] {
+    return this.uniquePaths([
+      path.join(this.configPaths.qoder, 'settings.json'),
+      path.join(this.configPaths.qoder, 'config.json'),
+      ...this.globalFallbacks(path.join(os.homedir(), '.config', 'qoder', 'settings.json')),
+    ]);
+  }
+
+  private globalFallbacks(...paths: string[]): string[] {
+    return this.includeGlobalFallbacks ? paths : [];
+  }
+
+  private uniquePaths(paths: string[]): string[] {
+    return Array.from(new Set(paths));
+  }
+
+  private resolveCandidatePath(candidates: string[]): string {
+    return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
+  }
+
+  private async getConfigFileResult<T>(
+    candidates: string[],
+    readContent: (filePath: string) => Promise<T>
+  ): Promise<ConfigFileResult<T>> {
+    const candidateResults = candidates.map((candidate) => ({
+      path: candidate,
+      exists: fs.existsSync(candidate),
+    }));
+    const selectedPath = candidateResults.find((candidate) => candidate.exists)?.path || candidates[0];
+
+    return {
+      path: selectedPath,
+      exists: fs.existsSync(selectedPath),
+      candidates: candidateResults,
+      content: await readContent(selectedPath),
+    };
   }
 
   private async ensureDir(dir: string): Promise<void> {

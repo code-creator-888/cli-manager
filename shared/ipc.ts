@@ -61,6 +61,15 @@ export interface ConversationFilter {
   offset?: number;
 }
 
+export interface ConversationStats {
+  total: number;
+  claude: number;
+  copilot: number;
+  codex: number;
+  qoder: number;
+  favorites: number;
+}
+
 export type NotificationType = 'error' | 'success' | 'info';
 
 export interface AppNotification {
@@ -78,6 +87,11 @@ export interface AppAPI {
   quit: () => void;
 }
 
+export interface ClipboardAPI {
+  readText: () => string;
+  writeText: (text: string) => void;
+}
+
 export interface TerminalAPI {
   create: (cliType: CLIType) => Promise<string>;
   write: (sessionId: string, data: string) => void;
@@ -92,18 +106,30 @@ export interface StatusAPI {
   checkAll: () => Promise<CLIStatus[]>;
 }
 
+export interface ConfigFileCandidate {
+  path: string;
+  exists: boolean;
+}
+
+export interface ConfigFileResult<T> {
+  path: string;
+  exists: boolean;
+  candidates: ConfigFileCandidate[];
+  content: T;
+}
+
 export interface ConfigAPI {
   get: (cliType: CLIType) => Promise<CLIConfig>;
   set: (cliType: CLIType, config: Record<string, unknown>) => Promise<void>;
   setEnvVar: (cliType: CLIType, key: string, value: string) => Promise<void>;
   deleteEnvVar: (cliType: CLIType, key: string) => Promise<void>;
-  getSettings: () => Promise<{ path: string; content: Record<string, unknown> }>;
+  getSettings: () => Promise<ConfigFileResult<Record<string, unknown>>>;
   setSettings: (settings: Record<string, unknown>) => Promise<void>;
-  getApps: () => Promise<{ path: string; content: Record<string, unknown> }>;
+  getApps: () => Promise<ConfigFileResult<Record<string, unknown>>>;
   setApps: (apps: Record<string, unknown>) => Promise<void>;
-  getCodexConfig: () => Promise<{ path: string; content: string }>;
+  getCodexConfig: () => Promise<ConfigFileResult<string>>;
   setCodexConfig: (config: string) => Promise<void>;
-  getQoderSettings: () => Promise<{ path: string; content: Record<string, unknown> }>;
+  getQoderSettings: () => Promise<ConfigFileResult<Record<string, unknown>>>;
   setQoderSettings: (settings: Record<string, unknown>) => Promise<void>;
 }
 
@@ -115,15 +141,18 @@ export interface ConversationAPI {
   addMessage: (conversationId: string, message: Omit<ConversationMessage, 'id' | 'conversationId' | 'timestamp'>) => Promise<string>;
   updateTitle: (id: string, title: string) => Promise<void>;
   delete: (id: string) => Promise<void>;
+  deleteByCLI: (cliType: CLIType) => Promise<number>;
   toggleFavorite: (id: string) => Promise<void>;
   getMessages: (conversationId: string) => Promise<ConversationMessage[]>;
   getActiveForSession: (sessionId: string) => Promise<Conversation | null>;
+  getStats: () => Promise<ConversationStats>;
   onCreated: (callback: (sessionId: string, conversationId: string) => void) => () => void;
   onMessage: (callback: (conversationId: string, message: ConversationMessage) => void) => () => void;
 }
 
 export interface CLIManagerAPI {
   app: AppAPI;
+  clipboard: ClipboardAPI;
   terminal: TerminalAPI;
   status: StatusAPI;
   config: ConfigAPI;
