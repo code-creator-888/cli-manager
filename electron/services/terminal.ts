@@ -92,6 +92,10 @@ export class TerminalService extends EventEmitter {
   }
 
   write(sessionId: string, data: string): void {
+    if (data.length === 0) {
+      return;
+    }
+
     const session = this.sessions.get(sessionId);
     if (session) {
       session.pty.write(data);

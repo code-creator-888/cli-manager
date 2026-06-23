@@ -187,7 +187,7 @@ function setupIPCHandlers(): void {
   });
 
   ipcMain.on('terminal:write', (_, sessionId: unknown, data: unknown) => {
-    terminalService.write(assertNonEmptyString(sessionId, 'sessionId'), assertNonEmptyString(data, 'data'));
+    terminalService.write(assertNonEmptyString(sessionId, 'sessionId'), assertString(data, 'data'));
   });
 
   ipcMain.on('terminal:resize', (_, sessionId: unknown, cols: unknown, rows: unknown) => {
