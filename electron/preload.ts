@@ -18,6 +18,9 @@ const api: CLIManagerAPI = {
     create: (cliType: CLIType) =>
       ipcRenderer.invoke('terminal:create', cliType),
 
+    createResume: (cliType: CLIType, cliSessionId: string) =>
+      ipcRenderer.invoke('terminal:createResume', cliType, cliSessionId),
+
     write: (sessionId: string, data: string) =>
       ipcRenderer.send('terminal:write', sessionId, data),
 

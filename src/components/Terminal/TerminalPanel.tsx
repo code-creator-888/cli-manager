@@ -45,10 +45,11 @@ export const TerminalPanel: React.FC = () => {
     isCreatingRef.current = true;
     setError(null);
     try {
-      const sessionId = await window.cliManagerAPI.terminal.create(cliType);
+      const { sessionId, cliSessionId } = await window.cliManagerAPI.terminal.create(cliType);
       addSession({
         id: sessionId,
         cliType,
+        cliSessionId,
         createdAt: new Date(),
         lastActivity: new Date(),
       });

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { TerminalService } from './services/terminal';
 import { ClaudeCLIService } from './services/claude-cli';
 import { CopilotCLIService } from './services/copilot-cli';
@@ -53,6 +54,34 @@ function getCommandForCLI(cliType: CLIType): string {
   }
 
   return command;
+}
+
+function supportsPresetCLISession(cliType: CLIType): boolean {
+  return ['claude', 'copilot', 'qoder'].includes(cliType);
+}
+
+function supportsResumeCLISession(cliType: CLIType): boolean {
+  return ['claude', 'copilot', 'codex', 'qoder'].includes(cliType);
+}
+
+function getNewSessionArgs(cliType: CLIType, cliSessionId: string): string[] {
+  if (cliType === 'copilot') {
+    return [`--session-id=${cliSessionId}`];
+  }
+
+  return ['--session-id', cliSessionId];
+}
+
+function getResumeSessionArgs(cliType: CLIType, cliSessionId: string): string[] {
+  if (cliType === 'codex') {
+    return ['resume', cliSessionId];
+  }
+
+  if (cliType === 'copilot') {
+    return [`--resume=${cliSessionId}`];
+  }
+
+  return ['--resume', cliSessionId];
 }
 
 function cleanupAppResources(): void {
@@ -197,7 +226,26 @@ function setupIPCHandlers(): void {
   ipcMain.handle('terminal:create', async (_, cliType: unknown) => {
     const validatedCLIType = assertCLIType(cliType);
     const command = getCommandForCLI(validatedCLIType);
-    return terminalService.createSession(command, validatedCLIType);
+    const cliSessionId = supportsPresetCLISession(validatedCLIType) ? crypto.randomUUID() : undefined;
+    const args = cliSessionId ? getNewSessionArgs(validatedCLIType, cliSessionId) : [];
+    const sessionId = terminalService.createSession(command, validatedCLIType, args, cliSessionId);
+    return { sessionId, cliSessionId };
+  });
+
+  ipcMain.handle('terminal:createResume', async (_, cliType: unknown, cliSessionId: unknown) => {
+    const validatedCLIType = assertCLIType(cliType);
+    const validatedSessionId = assertNonEmptyString(cliSessionId, 'cliSessionId');
+    if (!supportsResumeCLISession(validatedCLIType)) {
+      throw new Error(`${validatedCLIType} conversations cannot be resumed with saved context yet`);
+    }
+    const command = getCommandForCLI(validatedCLIType);
+    const sessionId = terminalService.createSession(
+      command,
+      validatedCLIType,
+      getResumeSessionArgs(validatedCLIType, validatedSessionId),
+      validatedSessionId
+    );
+    return { sessionId, cliSessionId: validatedSessionId };
   });
 
   ipcMain.on('terminal:write', (_, sessionId: unknown, data: unknown) => {
@@ -369,6 +417,11 @@ function setupIPCHandlers(): void {
       if (session) {
         const newConversationId = await conversationService.create(session.cliType, sessionId);
         terminalService.setConversationId(sessionId, newConversationId);
+        // Store the CLI session ID so the conversation can be resumed later
+        const cliSessionId = terminalService.resolveCLISessionId(sessionId);
+        if (cliSessionId) {
+          await conversationService.updateCLISessionId(newConversationId, cliSessionId);
+        }
         await conversationService.addMessage(newConversationId, message);
         mainWindow?.webContents.send('conversation:created', sessionId, newConversationId);
         mainWindow?.webContents.send('conversation:message', newConversationId, message);

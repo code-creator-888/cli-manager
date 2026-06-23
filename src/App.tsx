@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Sidebar, Header } from './components/Layout';
 import { TerminalPanel } from './components/Terminal';
 import { ConversationPanel } from './components/ConversationPanel';
 import { Dashboard } from './components/Dashboard';
 import { NotificationCenter } from './components/Notifications';
 import { useAppStore } from './stores';
-import { SidebarView } from './components/Layout/Sidebar';
 
 const App: React.FC = () => {
-  const [activeView, setActiveView] = useState<SidebarView>('terminal');
-  const { updateStatus, addNotification } = useAppStore();
+  const { activeView, setActiveView, updateStatus, addNotification } = useAppStore();
 
   // Check CLI status
   useEffect(() => {

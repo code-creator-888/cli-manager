@@ -105,10 +105,11 @@ export const Dashboard: React.FC = () => {
 
     try {
       setTerminalError(null);
-      const sessionId = await window.cliManagerAPI.terminal.create(cliType);
+      const { sessionId, cliSessionId } = await window.cliManagerAPI.terminal.create(cliType);
       addSession({
         id: sessionId,
         cliType,
+        cliSessionId,
         createdAt: new Date(),
         lastActivity: new Date(),
       });

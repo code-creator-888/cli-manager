@@ -1,14 +1,20 @@
 import * as pty from 'node-pty';
 import { EventEmitter } from 'events';
 import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 import { spawnSync } from 'child_process';
 import { ConversationParser, ParsedMessage } from './conversation-parser';
 
 const MAX_TERMINAL_DATA_CHUNK_BYTES = 64 * 1024;
+const CODEX_SESSION_DISCOVERY_WINDOW_MS = 60_000;
+const CODEX_SESSION_DISCOVERY_MAX_DEPTH = 4;
+const CODEX_SESSION_DISCOVERY_MAX_FILES = 200;
 
 interface TerminalSession {
   pty: pty.IPty;
   cliType: 'claude' | 'copilot' | 'codex' | 'qoder';
+  cliSessionId?: string;
   createdAt: Date;
   lastActivity: Date;
   conversationId?: string;
@@ -31,14 +37,14 @@ export class TerminalService extends EventEmitter {
     return result.status === 0;
   }
 
-  createSession(command: string, cliType: 'claude' | 'copilot' | 'codex' | 'qoder'): string {
+  createSession(command: string, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', args: string[] = [], cliSessionId?: string): string {
     if (!this.hasCommand(command)) {
       throw new Error(`${cliType} CLI is not installed or not available in PATH`);
     }
 
     const sessionId = this.generateSessionId();
 
-    const ptyProcess = pty.spawn(command, [], {
+    const ptyProcess = pty.spawn(command, args, {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
@@ -56,6 +62,7 @@ export class TerminalService extends EventEmitter {
     const session: TerminalSession = {
       pty: ptyProcess,
       cliType,
+      cliSessionId,
       createdAt: new Date(),
       lastActivity: new Date(),
       parser,
@@ -149,6 +156,32 @@ export class TerminalService extends EventEmitter {
     return session?.conversationId;
   }
 
+  getCLISessionId(sessionId: string): string | undefined {
+    const session = this.sessions.get(sessionId);
+    return session?.cliSessionId;
+  }
+
+  resolveCLISessionId(sessionId: string): string | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    if (session.cliSessionId) {
+      return session.cliSessionId;
+    }
+
+    if (session.cliType === 'codex') {
+      const discoveredSessionId = this.discoverCodexSessionId(session.createdAt);
+      if (discoveredSessionId) {
+        session.cliSessionId = discoveredSessionId;
+      }
+      return discoveredSessionId;
+    }
+
+    return undefined;
+  }
+
   resetParser(sessionId: string): void {
     const session = this.sessions.get(sessionId);
     if (session) {
@@ -158,6 +191,83 @@ export class TerminalService extends EventEmitter {
 
   private generateSessionId(): string {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private discoverCodexSessionId(startedAt: Date): string | undefined {
+    const sessionsDir = path.join(os.homedir(), '.codex', 'sessions');
+    if (!fs.existsSync(sessionsDir)) {
+      return undefined;
+    }
+
+    // Codex CLI does not support assigning a session id when starting a fresh
+    // TUI session. This is a best-effort fallback that looks for the session
+    // file Codex created shortly after launch; concurrent Codex launches can
+    // still make this ambiguous.
+    const minMtime = startedAt.getTime() - CODEX_SESSION_DISCOVERY_WINDOW_MS;
+    const files = this.listFiles(sessionsDir, CODEX_SESSION_DISCOVERY_MAX_DEPTH, CODEX_SESSION_DISCOVERY_MAX_FILES)
+      .map((filePath) => {
+        try {
+          return { filePath, stat: fs.statSync(filePath) };
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry): entry is { filePath: string; stat: fs.Stats } =>
+        entry !== null && entry.stat.isFile() && entry.stat.mtimeMs >= minMtime
+      )
+      .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs);
+
+    for (const { filePath } of files) {
+      const idFromPath = this.extractUUID(filePath);
+      if (idFromPath) {
+        return idFromPath;
+      }
+
+      try {
+        const content = fs.readFileSync(filePath, 'utf8').slice(0, 64 * 1024);
+        const idFromContent = this.extractUUID(content);
+        if (idFromContent) {
+          return idFromContent;
+        }
+      } catch {
+        // Ignore unreadable session files and continue with other candidates.
+      }
+    }
+
+    return undefined;
+  }
+
+  private listFiles(dir: string, maxDepth: number, maxFiles: number, depth = 0, files: string[] = []): string[] {
+    if (depth > maxDepth || files.length >= maxFiles) {
+      return files;
+    }
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return files;
+    }
+
+    for (const entry of entries) {
+      if (files.length >= maxFiles) {
+        break;
+      }
+
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        this.listFiles(fullPath, maxDepth, maxFiles, depth + 1, files);
+      } else if (entry.isFile()) {
+        files.push(fullPath);
+      }
+    }
+
+    return files;
+  }
+
+  private extractUUID(value: string): string | undefined {
+    const match = value.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+    return match?.[0];
   }
 
   private emitTerminalData(sessionId: string, data: string): void {

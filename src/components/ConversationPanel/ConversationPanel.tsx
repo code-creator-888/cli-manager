@@ -2,9 +2,10 @@ import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../../stores';
 import { ConversationWithMessages } from '../../types';
 import { MessageBubble } from './MessageBubble';
+import type { CLIType } from '../../types';
 
 export const ConversationPanel: React.FC = () => {
-  const { activeCLI, conversations, setActiveConversation, setConversations, removeConversation, removeConversationsForCLI, setConversationMessages, addNotification } = useAppStore();
+  const { activeCLI, conversations, sessions, setActiveConversation, setConversations, removeConversation, removeConversationsForCLI, setConversationMessages, addNotification, addSession, setActiveCLI, setActiveSession, setActiveView } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -120,6 +121,48 @@ export const ConversationPanel: React.FC = () => {
       if (requestId === detailsRequestRef.current) {
         setLoadingConversationId(null);
       }
+    }
+  };
+
+  const resumeConversation = async (cliType: CLIType, cliSessionId: string | undefined) => {
+    if (!cliSessionId) {
+      addNotification({
+        type: 'info',
+        message: '此对话创建时尚未记录 CLI session，无法恢复上下文。',
+      });
+      return;
+    }
+
+    if (!window.cliManagerAPI) return;
+
+    const existingSession = Object.values(sessions).find(
+      s => s.cliType === cliType && s.cliSessionId === cliSessionId
+    );
+
+    if (existingSession) {
+      setActiveCLI(cliType);
+      setActiveSession(existingSession.id);
+      setActiveView('terminal');
+      return;
+    }
+
+    try {
+      const { sessionId, cliSessionId: resumedCLISessionId } = await window.cliManagerAPI.terminal.createResume(cliType, cliSessionId);
+      addSession({
+        id: sessionId,
+        cliType,
+        cliSessionId: resumedCLISessionId,
+        createdAt: new Date(),
+        lastActivity: new Date(),
+      });
+      setActiveCLI(cliType);
+      setActiveSession(sessionId);
+      setActiveView('terminal');
+    } catch (e) {
+      addNotification({
+        type: 'error',
+        message: `Failed to resume session: ${e instanceof Error ? e.message : String(e)}`,
+      });
     }
   };
 
@@ -362,15 +405,33 @@ export const ConversationPanel: React.FC = () => {
                     </div>
 
                     {/* Actions */}
-                    <button
-                      onClick={(e) => deleteConversation(conv.id, e)}
-                      className="text-text-secondary hover:text-red-500 p-1"
-                      title="Delete"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-                      </svg>
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); resumeConversation(conv.cliType, conv.cliSessionId); }}
+                        disabled={!conv.cliSessionId}
+                        className={`p-1 ${
+                          conv.cliSessionId
+                            ? 'text-text-secondary hover:text-blue-400'
+                            : 'cursor-not-allowed text-text-secondary/40'
+                        }`}
+                        title={conv.cliSessionId ? '继续对话（恢复上下文）' : '无法恢复上下文：缺少 CLI session'}
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="5" width="18" height="14" rx="2" />
+                          <path d="m7 10 3 2-3 2" />
+                          <path d="M13 15h5" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={(e) => deleteConversation(conv.id, e)}
+                        className="text-text-secondary hover:text-red-500 p-1"
+                        title="Delete"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -388,17 +449,36 @@ export const ConversationPanel: React.FC = () => {
               <h2 className="text-lg font-medium text-text-primary">
                 {selectedConversation.title || 'Untitled Conversation'}
               </h2>
-              <button
-                onClick={() => {
-                  setSelectedConversation(null);
-                  setActiveConversation(null);
-                }}
-                className="text-text-secondary hover:text-text-primary p-1"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => resumeConversation(selectedConversation.cliType, selectedConversation.cliSessionId)}
+                  disabled={!selectedConversation.cliSessionId}
+                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                    selectedConversation.cliSessionId
+                      ? 'border-blue-500/40 bg-blue-600/20 text-blue-300 hover:bg-blue-600/30'
+                      : 'cursor-not-allowed border-bg-tertiary bg-bg-tertiary/40 text-text-secondary/50'
+                  }`}
+                  title={selectedConversation.cliSessionId ? '恢复此对话的上下文继续聊' : '无法恢复上下文：缺少 CLI session'}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <path d="m7 10 3 2-3 2" />
+                    <path d="M13 15h5" />
+                  </svg>
+                  继续对话
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedConversation(null);
+                    setActiveConversation(null);
+                  }}
+                  className="text-text-secondary hover:text-text-primary p-1"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-4 mt-2 text-xs text-text-secondary">
               <span>

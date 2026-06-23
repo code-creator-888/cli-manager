@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { AppNotification, CLIType, TerminalSession, CLIStatus, Conversation, ConversationMessage } from '../types';
+import { ActiveView, AppNotification, CLIType, TerminalSession, CLIStatus, Conversation, ConversationMessage } from '../types';
 
 interface AppState {
   activeCLI: CLIType;
   activeSessionId: string | null;
+  activeView: ActiveView;
   sessions: Record<string, TerminalSession>;
   statuses: Record<CLIType, CLIStatus | null>;
   notifications: AppNotification[];
@@ -14,6 +15,7 @@ interface AppState {
   conversationMessages: Record<string, ConversationMessage[]>;
 
   setActiveCLI: (cli: CLIType) => void;
+  setActiveView: (view: ActiveView) => void;
   setActiveSession: (sessionId: string | null) => void;
   addSession: (session: TerminalSession) => void;
   removeSession: (sessionId: string) => void;
@@ -36,6 +38,7 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   activeCLI: 'copilot',
   activeSessionId: null,
+  activeView: 'terminal',
   sessions: {},
   statuses: {
     claude: null,
@@ -58,6 +61,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeSessionId: cliSessions.length > 0 ? cliSessions[0].id : null
     });
   },
+
+  setActiveView: (view) => set({ activeView: view }),
 
   setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
 

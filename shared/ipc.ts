@@ -3,6 +3,7 @@ export type CLIType = 'claude' | 'copilot' | 'codex' | 'qoder';
 export interface TerminalSession {
   id: string;
   cliType: CLIType;
+  cliSessionId?: string;
   pid?: number;
   createdAt: Date;
   lastActivity: Date;
@@ -30,6 +31,7 @@ export interface Conversation {
   id: string;
   cliType: CLIType;
   sessionId: string;
+  cliSessionId?: string;
   title?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -83,6 +85,8 @@ export interface ConversationWithMessages extends Conversation {
   messages: ConversationMessage[];
 }
 
+export type ActiveView = 'terminal' | 'conversation' | 'dashboard';
+
 export interface AppAPI {
   quit: () => void;
 }
@@ -92,8 +96,14 @@ export interface ClipboardAPI {
   writeText: (text: string) => void;
 }
 
+export interface TerminalCreateResult {
+  sessionId: string;
+  cliSessionId?: string;
+}
+
 export interface TerminalAPI {
-  create: (cliType: CLIType) => Promise<string>;
+  create: (cliType: CLIType) => Promise<TerminalCreateResult>;
+  createResume: (cliType: CLIType, cliSessionId: string) => Promise<TerminalCreateResult>;
   write: (sessionId: string, data: string) => void;
   resize: (sessionId: string, cols: number, rows: number) => void;
   destroy: (sessionId: string) => void;

@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 import { buildFTSQuery } from './conversation-search';
 
 type CLIType = 'claude' | 'copilot' | 'codex' | 'qoder';
-const LATEST_SCHEMA_VERSION = 2;
+const LATEST_SCHEMA_VERSION = 3;
 
 // Generate UUID v4 without external dependency
 function generateUUID(): string {
@@ -14,6 +14,7 @@ export interface Conversation {
   id: string;
   cliType: CLIType;
   sessionId: string;
+  cliSessionId?: string;
   title?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -82,6 +83,13 @@ export class ConversationService {
         this.createSearchSchema();
         this.rebuildSearchIndex();
         this.db!.pragma('user_version = 2');
+      }
+
+      if (currentVersion < 3) {
+        this.db!.exec(`
+          ALTER TABLE conversations ADD COLUMN cli_session_id TEXT;
+        `);
+        this.db!.pragma('user_version = 3');
       }
     });
 
@@ -305,6 +313,12 @@ export class ConversationService {
     `).run(title, new Date().toISOString(), id);
   }
 
+  async updateCLISessionId(id: string, cliSessionId: string): Promise<void> {
+    this.db!.prepare(`
+      UPDATE conversations SET cli_session_id = ? WHERE id = ?
+    `).run(cliSessionId, id);
+  }
+
   async delete(id: string): Promise<void> {
     // CASCADE will delete messages automatically
     this.db!.prepare('DELETE FROM conversations WHERE id = ?').run(id);
@@ -387,6 +401,7 @@ export class ConversationService {
       id: row.id,
       cliType: row.cli_type,
       sessionId: row.session_id,
+      cliSessionId: row.cli_session_id || undefined,
       title: row.title || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

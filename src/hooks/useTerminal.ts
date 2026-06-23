@@ -10,10 +10,11 @@ export const useTerminal = () => {
 
     isCreatingRef.current = true;
     try {
-      const sessionId = await window.cliManagerAPI.terminal.create(activeCLI);
+      const { sessionId, cliSessionId } = await window.cliManagerAPI.terminal.create(activeCLI);
       addSession({
         id: sessionId,
         cliType: activeCLI,
+        cliSessionId,
         createdAt: new Date(),
         lastActivity: new Date(),
       });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAppStore } from '../../stores';
+import type { ActiveView } from '../../types';
 
 const claudeIcon = (
   <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" aria-hidden="true">
@@ -54,7 +55,7 @@ const terminalIcon = (
   </svg>
 );
 
-export type SidebarView = 'terminal' | 'conversation' | 'dashboard';
+export type SidebarView = ActiveView;
 
 interface SidebarProps {
   activeView: SidebarView;
