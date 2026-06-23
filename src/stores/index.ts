@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import { CLIType, TerminalSession, CLIStatus, Conversation, ConversationMessage } from '../types';
+import { AppNotification, CLIType, TerminalSession, CLIStatus, Conversation, ConversationMessage } from '../types';
 
 interface AppState {
   activeCLI: CLIType;
   activeSessionId: string | null;
   sessions: Record<string, TerminalSession>;
   statuses: Record<CLIType, CLIStatus | null>;
+  notifications: AppNotification[];
 
   // Conversation state
   activeConversationId: string | null;
@@ -17,6 +18,8 @@ interface AppState {
   addSession: (session: TerminalSession) => void;
   removeSession: (sessionId: string) => void;
   updateStatus: (cliType: CLIType, status: CLIStatus) => void;
+  addNotification: (notification: Omit<AppNotification, 'id' | 'createdAt'>) => string;
+  removeNotification: (id: string) => void;
   getSessionsForCLI: (cli: CLIType) => TerminalSession[];
 
   // Conversation actions
@@ -42,6 +45,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeConversationId: null,
   conversations: {},
   conversationMessages: {},
+  notifications: [],
 
   setActiveCLI: (cli) => {
     const state = get();
@@ -64,7 +68,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   removeSession: (sessionId) =>
     set((state) => {
-      const { [sessionId]: removed, ...remaining } = state.sessions;
+      const remaining = { ...state.sessions };
+      delete remaining[sessionId];
       const remainingList = Object.values(remaining);
 
       let newActiveSessionId = state.activeSessionId;
@@ -84,6 +89,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateStatus: (cliType, status) =>
     set((state) => ({
       statuses: { ...state.statuses, [cliType]: status },
+    })),
+
+  addNotification: (notification) => {
+    const id = `notification_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    set((state) => ({
+      notifications: [
+        ...state.notifications,
+        {
+          ...notification,
+          id,
+          createdAt: Date.now(),
+        },
+      ].slice(-5),
+    }));
+    return id;
+  },
+
+  removeNotification: (id) =>
+    set((state) => ({
+      notifications: state.notifications.filter((notification) => notification.id !== id),
     })),
 
   getSessionsForCLI: (cli) => {
@@ -121,8 +146,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   removeConversation: (conversationId) =>
     set((state) => {
-      const { [conversationId]: removed, ...remainingConversations } = state.conversations;
-      const { [conversationId]: removedMessages, ...remainingMessages } = state.conversationMessages;
+      const remainingConversations = { ...state.conversations };
+      const remainingMessages = { ...state.conversationMessages };
+      delete remainingConversations[conversationId];
+      delete remainingMessages[conversationId];
 
       return {
         conversations: remainingConversations,
@@ -139,7 +166,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   addConversationMessage: (conversationId, message) =>
     set((state) => {
       const existing = state.conversationMessages[conversationId] || [];
+      const conversation = state.conversations[conversationId];
+
       return {
+        conversations: conversation
+          ? {
+              ...state.conversations,
+              [conversationId]: {
+                ...conversation,
+                updatedAt: message.timestamp,
+                messageCount: conversation.messageCount + 1,
+              },
+            }
+          : state.conversations,
         conversationMessages: {
           ...state.conversationMessages,
           [conversationId]: [...existing, message],

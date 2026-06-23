@@ -2,25 +2,35 @@
   "name": "cli-manager",
   "version": "1.0.0",
   "description": "CLI Manager - Claude CLI & Copilot CLI Desktop Management Tool",
-  "main": "dist-electron/main.js",
+  "author": "CLI Manager",
+  "main": "dist-electron/electron/main.js",
   "bin": {
     "cli-manager-start": "bin/cli-manager-start.cjs"
   },
   "scripts": {
     "ensure:electron": "node scripts/ensure-electron.cjs",
-    "postinstall": "npm run ensure:electron && electron-rebuild -f -w better-sqlite3,node-pty",
+    "postinstall": "npm run rebuild:native",
     "start:background": "node bin/cli-manager-start.cjs",
     "dev": "npm run ensure:electron && npm run build:electron && concurrently --kill-others --success first \"vite\" \"electron .\"",
     "dev:vite": "vite",
-    "build": "npm run build:electron && vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
-    "rebuild": "npm run ensure:electron && electron-rebuild -f -w better-sqlite3,node-pty",
+    "build": "npm run typecheck && npm run build:electron && vite build",
+    "build:electron": "node scripts/clean-electron-build.cjs && tsc -p tsconfig.electron.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "rebuild": "npm run rebuild:native",
+    "rebuild:native": "node scripts/rebuild-native.cjs",
+    "smoke:native": "node scripts/smoke-native.cjs",
+    "smoke:package": "node scripts/smoke-package.cjs",
+    "smoke": "npm run smoke:native && npm run smoke:package",
+    "smoke:full": "npm test && npm run lint && npm run build && npm run smoke:native && npm run smoke:package",
+    "package:mac:dir:smoke": "npm run package:mac:dir && npm run smoke:package",
     "preview": "npm run ensure:electron && vite preview",
-    "package": "npm run ensure:electron && npm run build && electron-builder",
-    "package:mac": "npm run ensure:electron && npm run build && electron-builder --mac",
-    "package:win": "npm run ensure:electron && npm run build && electron-builder --win",
-    "package:linux": "npm run ensure:electron && npm run build && electron-builder --linux",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "package": "npm run build && electron-builder",
+    "package:mac:dir": "npm run build && electron-builder --mac dir",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:win": "npm run build && electron-builder --win",
+    "package:linux": "npm run build && electron-builder --linux",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "vitest run"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
@@ -34,19 +44,24 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.4",
     "@types/better-sqlite3": "^7.6.8",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
+    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/parser": "^8.62.0",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.17",
     "concurrently": "^8.2.2",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.4.5",
     "postcss": "^8.4.33",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3",
-    "vite": "^5.0.12"
+    "vite": "^5.0.12",
+    "vitest": "^4.1.9"
   }
 }

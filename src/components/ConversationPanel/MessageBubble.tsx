@@ -27,7 +27,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       }
 
       // Add code block
-      const language = match[1] || '';
       const code = match[2];
       parts.push(
         <pre key={key++} className="my-2 p-3 bg-bg-tertiary rounded-lg overflow-x-auto">

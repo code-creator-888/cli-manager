@@ -5,6 +5,7 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const { assertNativeModuleFiles } = require('../scripts/native-modules.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 const runtimeDir = path.join(os.homedir(), '.cli-manager');
@@ -54,6 +55,13 @@ function ensureDependenciesInstalled() {
   if (!fs.existsSync(nodeModulesPath)) {
     throw new Error(`Missing dependencies. Run "npm install" in ${projectRoot} first.`);
   }
+
+  try {
+    assertNativeModuleFiles(projectRoot);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${message}. Run "npm run rebuild:native" in ${projectRoot}.`);
+  }
 }
 
 function ensureNpmAvailable() {
@@ -76,6 +84,62 @@ function canListenOnHost(port, host) {
 
     server.listen(port, host);
   });
+}
+
+function getLogTail(maxLines = 80) {
+  if (!fs.existsSync(logFile)) {
+    return 'Log file does not exist yet.';
+  }
+
+  const content = fs.readFileSync(logFile, 'utf8');
+  const lines = content.trimEnd().split(/\r?\n/);
+  return lines.slice(-maxLines).join('\n') || 'Log file is empty.';
+}
+
+function getProcessCommand(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return 'unknown';
+  }
+
+  if (process.platform === 'win32') {
+    const result = spawnSync('wmic', ['process', 'where', `ProcessId=${pid}`, 'get', 'CommandLine', '/value'], {
+      encoding: 'utf8',
+    });
+    return result.stdout.trim() || 'unknown';
+  }
+
+  const result = spawnSync('ps', ['-p', String(pid), '-o', 'pid=,ppid=,command='], {
+    encoding: 'utf8',
+  });
+  return result.stdout.trim() || 'unknown';
+}
+
+function getPortOwners(port) {
+  if (process.platform === 'win32') {
+    const result = spawnSync('netstat', ['-ano'], { encoding: 'utf8' });
+    return result.stdout
+      .split(/\r?\n/)
+      .filter((line) => line.includes(`:${port}`))
+      .slice(0, 10)
+      .join('\n') || 'No owner found.';
+  }
+
+  const result = spawnSync('lsof', ['-nP', '-iTCP:' + port, '-sTCP:LISTEN'], { encoding: 'utf8' });
+  return result.stdout.trim() || result.stderr.trim() || 'No owner found.';
+}
+
+function createStartupDiagnostics(pid, port) {
+  return [
+    'CLI Manager failed to stay running.',
+    `Project: ${projectRoot}`,
+    `PID file: ${pidFile}`,
+    `Spawned PID: ${pid}`,
+    `Spawned process: ${getProcessCommand(pid)}`,
+    `Dev server port: ${port}`,
+    `Port owners:\n${getPortOwners(port)}`,
+    `Log file: ${logFile}`,
+    `Recent log:\n${getLogTail()}`,
+  ].join('\n\n');
 }
 
 async function canListenOnPort(port) {
@@ -142,7 +206,7 @@ async function main() {
 
   if (!isProcessRunning(pid)) {
     removeStalePidFile();
-    throw new Error(`CLI Manager failed to stay running. Check log: ${logFile}`);
+    throw new Error(createStartupDiagnostics(pid, port));
   }
 
   console.log(`CLI Manager started in background (PID: ${pid}).`);

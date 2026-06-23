@@ -1,9 +1,15 @@
 import React, { useCallback, useMemo, useEffect, useRef, useState } from 'react';
 import { TerminalView } from './TerminalView';
 import { useAppStore } from '../../stores';
+import {
+  canCreateTerminalSession,
+  getTerminalSessionLimitMessage,
+  MAX_TERMINAL_SESSIONS_PER_CLI,
+} from '../../utils/sessionLimits';
+import type { CLIType } from '../../types';
 
 export const TerminalPanel: React.FC = () => {
-  const { activeCLI, activeSessionId, addSession, removeSession, sessions } = useAppStore();
+  const { activeCLI, activeSessionId, addSession, removeSession, sessions, addNotification } = useAppStore();
   const isCreatingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +31,16 @@ export const TerminalPanel: React.FC = () => {
   }, [activeSessionId, sessions, activeCLI, currentCLISessions]);
 
   // Create a new session
-  const createSession = useCallback(async (cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
+  const createSession = useCallback(async (cliType: CLIType) => {
     if (!window.cliManagerAPI || isCreatingRef.current) return;
+
+    const freshSessions = useAppStore.getState().sessions;
+    if (!canCreateTerminalSession(freshSessions, cliType)) {
+      const message = getTerminalSessionLimitMessage(cliType);
+      setError(message);
+      addNotification({ type: 'error', message });
+      return;
+    }
 
     isCreatingRef.current = true;
     setError(null);
@@ -40,14 +54,24 @@ export const TerminalPanel: React.FC = () => {
       });
     } catch (error) {
       console.error('Failed to create terminal session:', error);
-      setError(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setError(message);
+      addNotification({ type: 'error', message: `Failed to create terminal session: ${message}` });
     } finally {
       isCreatingRef.current = false;
     }
-  }, [addSession]);
+  }, [addSession, addNotification]);
 
   // Close a session
   const closeSession = useCallback((sessionId: string) => {
+    const confirmed = typeof window.confirm === 'function'
+      ? window.confirm('Close this terminal session? Running CLI work in this session will be stopped.')
+      : true;
+
+    if (!confirmed) {
+      return;
+    }
+
     if (window.cliManagerAPI) {
       window.cliManagerAPI.terminal.destroy(sessionId);
     }
@@ -140,6 +164,8 @@ export const TerminalPanel: React.FC = () => {
     }
   }, [currentSession]);
 
+  const reachedSessionLimit = currentCLISessions.length >= MAX_TERMINAL_SESSIONS_PER_CLI;
+
   return (
     <div
       className="flex flex-col bg-bg-primary relative"
@@ -222,8 +248,13 @@ export const TerminalPanel: React.FC = () => {
           ))}
           <button
             onClick={() => createSession(activeCLI)}
-            className="px-3 py-2 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
-            title="New Terminal"
+            disabled={reachedSessionLimit}
+            className={`px-3 py-2 ${
+              reachedSessionLimit
+                ? 'text-text-secondary/50 cursor-not-allowed'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+            }`}
+            title={reachedSessionLimit ? getTerminalSessionLimitMessage(activeCLI) : 'New Terminal'}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -268,6 +299,11 @@ export const TerminalPanel: React.FC = () => {
               </div>
             ) : (
               <div className="text-text-secondary">Creating terminal...</div>
+            )}
+            {Object.keys(sessions).length > 0 && error && (
+              <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300 shadow-lg">
+                {error}
+              </div>
             )}
           </div>
         )}

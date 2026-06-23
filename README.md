@@ -9,6 +9,7 @@ Currently supported:
 - Claude CLI
 - GitHub Copilot CLI
 - Codex CLI
+- Qoder CLI
 
 ## 中文
 
@@ -18,7 +19,7 @@ CLI Manager 是一个基于 Electron + React 构建的桌面应用，用来统�
 
 ### 核心功能
 
-- 多 CLI 统一入口：在同一个应用中管理 Claude CLI、GitHub Copilot CLI 和 Codex CLI
+- 多 CLI 统一入口：在同一个应用中管理 Claude CLI、GitHub Copilot CLI、Codex CLI 和 Qoder CLI
 - 内置终端会话：通过集成式终端直接启动和使用各类 CLI
 - 状态监控：查看 CLI 是否安装、版本号、运行状态、PID、CPU 和内存占用
 - 配置管理：读取和写入对应 CLI 的配置目录或配置文件
@@ -90,9 +91,26 @@ npm run package
 平台打包命令：
 
 ```bash
+npm run package:mac:dir
+npm run package:mac:dir:smoke
 npm run package:mac
 npm run package:win
 npm run package:linux
+```
+
+#### 原生模块与冒烟验证
+
+项目依赖 `better-sqlite3` 和 `node-pty` 原生模块。安装依赖后会自动按 Electron ABI 重建；如果切换 Electron/Node 版本或遇到 native module 加载失败，可手动执行：
+
+```bash
+npm run rebuild:native
+npm run smoke:native
+```
+
+打包后可验证产物结构、`app.asar.unpacked` 内的原生模块，以及打包应用是否能无界面启动并自动退出：
+
+```bash
+npm run smoke:package
 ```
 
 ### 常用脚本
@@ -102,8 +120,14 @@ npm run dev
 npm run start:background
 npm run build
 npm run build:electron
+npm run typecheck
+npm run test
 npm run preview
 npm run rebuild
+npm run rebuild:native
+npm run smoke:native
+npm run smoke:package
+npm run smoke:full
 npm run lint
 ```
 
@@ -147,7 +171,7 @@ CLI Manager is a desktop app built with Electron and React for managing multiple
 
 ### Features
 
-- Unified CLI hub for Claude CLI, GitHub Copilot CLI, and Codex CLI
+- Unified CLI hub for Claude CLI, GitHub Copilot CLI, Codex CLI, and Qoder CLI
 - Embedded terminal sessions for launching and using each CLI directly
 - Status monitoring for installation state, version, process status, PID, CPU, and memory usage
 - Configuration management for reading and writing CLI-specific config files
@@ -217,9 +241,26 @@ npm run package
 Platform-specific packaging:
 
 ```bash
+npm run package:mac:dir
+npm run package:mac:dir:smoke
 npm run package:mac
 npm run package:win
 npm run package:linux
+```
+
+#### Native modules and smoke checks
+
+The app uses native modules (`better-sqlite3` and `node-pty`). `npm install` rebuilds them for Electron automatically. If you change Electron/Node versions or see native module load errors, run:
+
+```bash
+npm run rebuild:native
+npm run smoke:native
+```
+
+After packaging, validate the artifact layout, native modules under `app.asar.unpacked`, and a headless packaged-app launch/quit cycle:
+
+```bash
+npm run smoke:package
 ```
 
 ### Useful Scripts
@@ -229,8 +270,14 @@ npm run dev
 npm run start:background
 npm run build
 npm run build:electron
+npm run typecheck
+npm run test
 npm run preview
 npm run rebuild
+npm run rebuild:native
+npm run smoke:native
+npm run smoke:package
+npm run smoke:full
 npm run lint
 ```
 

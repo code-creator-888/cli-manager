@@ -4,6 +4,8 @@ import * as os from 'os';
 import { spawnSync } from 'child_process';
 import { ConversationParser, ParsedMessage } from './conversation-parser';
 
+const MAX_TERMINAL_DATA_CHUNK_BYTES = 64 * 1024;
+
 interface TerminalSession {
   pty: pty.IPty;
   cliType: 'claude' | 'copilot' | 'codex' | 'qoder';
@@ -74,7 +76,7 @@ export class TerminalService extends EventEmitter {
       // Feed data to parser for conversation extraction
       session.parser.feed(data);
       // Emit raw data for terminal display
-      this.emit('data', sessionId, data);
+      this.emitTerminalData(sessionId, data);
     });
 
     // Handle exit
@@ -109,7 +111,7 @@ export class TerminalService extends EventEmitter {
     if (session) {
       try {
         session.pty.kill();
-      } catch (e) {
+      } catch {
         // Ignore errors on kill
       }
       this.sessions.delete(sessionId);
@@ -151,6 +153,17 @@ export class TerminalService extends EventEmitter {
 
   private generateSessionId(): string {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private emitTerminalData(sessionId: string, data: string): void {
+    if (data.length <= MAX_TERMINAL_DATA_CHUNK_BYTES) {
+      this.emit('data', sessionId, data);
+      return;
+    }
+
+    for (let offset = 0; offset < data.length; offset += MAX_TERMINAL_DATA_CHUNK_BYTES) {
+      this.emit('data', sessionId, data.slice(offset, offset + MAX_TERMINAL_DATA_CHUNK_BYTES));
+    }
   }
 }
 

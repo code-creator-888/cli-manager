@@ -8,6 +8,17 @@ import { CodexCLIService } from './services/codex-cli';
 import { QoderCLIService } from './services/qoder-cli';
 import { ConfigService } from './services/config';
 import { ConversationService, ConversationMessage, ConversationFilter } from './services/conversation';
+import type { CLIType } from '../shared/ipc';
+import {
+  assertCLIType,
+  assertConversationFilter,
+  assertConversationMessage,
+  assertNonEmptyString,
+  assertOptionalString,
+  assertPlainObject,
+  assertString,
+  assertTerminalSize,
+} from './ipc-validation';
 
 let mainWindow: BrowserWindow | null = null;
 let terminalService: TerminalService;
@@ -22,13 +33,14 @@ let isQuitting = false;
 const devServerPort = process.env.CLI_MANAGER_DEV_PORT || '5173';
 const devServerUrl = `http://localhost:${devServerPort}`;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const isSmokeTest = process.env.CLI_MANAGER_SMOKE_TEST === '1' || process.argv.includes('--cli-manager-smoke-test');
 
 function getWindowIcon(): string | undefined {
-  const iconPath = path.join(__dirname, '../assets/icon.png');
+  const iconPath = path.join(__dirname, '../../assets/icon.png');
   return fs.existsSync(iconPath) ? iconPath : undefined;
 }
 
-function getCommandForCLI(cliType: 'claude' | 'copilot' | 'codex' | 'qoder'): string {
+function getCommandForCLI(cliType: CLIType): string {
   const candidates = cliType === 'copilot'
     ? ['copilot', 'github-copilot-cli']
     : cliType === 'qoder'
@@ -71,6 +83,7 @@ function createWindow(): void {
     height: 900,
     minWidth: 1000,
     minHeight: 700,
+    show: !isSmokeTest,
     title: 'CLI Manager',
     backgroundColor: '#1a1a2e',
     webPreferences: {
@@ -81,10 +94,28 @@ function createWindow(): void {
     icon: getWindowIcon(),
   });
 
-  if (isDev) {
-    mainWindow.loadURL(devServerUrl);
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  const loadPromise = isDev
+    ? mainWindow.loadURL(devServerUrl)
+    : mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+
+  if (isSmokeTest) {
+    const smokeTimeout = setTimeout(() => {
+      console.error('CLI Manager smoke test timed out while loading the main window.');
+      cleanupAppResources();
+      app.exit(1);
+    }, 15000);
+
+    loadPromise
+      .then(() => {
+        clearTimeout(smokeTimeout);
+        quitApp();
+      })
+      .catch((error: unknown) => {
+        clearTimeout(smokeTimeout);
+        console.error(`CLI Manager smoke test failed to load: ${error instanceof Error ? error.message : String(error)}`);
+        cleanupAppResources();
+        app.exit(1);
+      });
   }
 
   mainWindow.on('closed', () => {
@@ -149,21 +180,23 @@ function setupIPCHandlers(): void {
   ipcMain.on('app:quit', () => quitApp());
 
   // Terminal handlers
-  ipcMain.handle('terminal:create', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
-    const command = getCommandForCLI(cliType);
-    return terminalService.createSession(command, cliType);
+  ipcMain.handle('terminal:create', async (_, cliType: unknown) => {
+    const validatedCLIType = assertCLIType(cliType);
+    const command = getCommandForCLI(validatedCLIType);
+    return terminalService.createSession(command, validatedCLIType);
   });
 
-  ipcMain.on('terminal:write', (_, sessionId: string, data: string) => {
-    terminalService.write(sessionId, data);
+  ipcMain.on('terminal:write', (_, sessionId: unknown, data: unknown) => {
+    terminalService.write(assertNonEmptyString(sessionId, 'sessionId'), assertNonEmptyString(data, 'data'));
   });
 
-  ipcMain.on('terminal:resize', (_, sessionId: string, cols: number, rows: number) => {
-    terminalService.resize(sessionId, cols, rows);
+  ipcMain.on('terminal:resize', (_, sessionId: unknown, cols: unknown, rows: unknown) => {
+    const size = assertTerminalSize(cols, rows);
+    terminalService.resize(assertNonEmptyString(sessionId, 'sessionId'), size.cols, size.rows);
   });
 
-  ipcMain.on('terminal:destroy', (_, sessionId: string) => {
-    terminalService.destroy(sessionId);
+  ipcMain.on('terminal:destroy', (_, sessionId: unknown) => {
+    terminalService.destroy(assertNonEmptyString(sessionId, 'sessionId'));
   });
 
   // Forward terminal data to renderer
@@ -176,10 +209,11 @@ function setupIPCHandlers(): void {
   });
 
   // Status handlers
-  ipcMain.handle('status:get', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
-    if (cliType === 'claude') return claudeService.getStatus();
-    if (cliType === 'codex') return codexService.getStatus();
-    if (cliType === 'qoder') return qoderService.getStatus();
+  ipcMain.handle('status:get', async (_, cliType: unknown) => {
+    const validatedCLIType = assertCLIType(cliType);
+    if (validatedCLIType === 'claude') return claudeService.getStatus();
+    if (validatedCLIType === 'codex') return codexService.getStatus();
+    if (validatedCLIType === 'qoder') return qoderService.getStatus();
     return copilotService.getStatus();
   });
 
@@ -195,20 +229,24 @@ function setupIPCHandlers(): void {
   });
 
   // Config handlers
-  ipcMain.handle('config:get', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
-    return configService.get(cliType);
+  ipcMain.handle('config:get', async (_, cliType: unknown) => {
+    return configService.get(assertCLIType(cliType));
   });
 
-  ipcMain.handle('config:set', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', config: Record<string, unknown>) => {
-    await configService.set(cliType, config);
+  ipcMain.handle('config:set', async (_, cliType: unknown, config: unknown) => {
+    await configService.set(assertCLIType(cliType), assertPlainObject(config, 'config'));
   });
 
-  ipcMain.handle('config:setEnvVar', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', key: string, value: string) => {
-    await configService.setEnvVar(cliType, key, value);
+  ipcMain.handle('config:setEnvVar', async (_, cliType: unknown, key: unknown, value: unknown) => {
+    await configService.setEnvVar(
+      assertCLIType(cliType),
+      assertNonEmptyString(key, 'key'),
+      assertNonEmptyString(value, 'value')
+    );
   });
 
-  ipcMain.handle('config:deleteEnvVar', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', key: string) => {
-    await configService.deleteEnvVar(cliType, key);
+  ipcMain.handle('config:deleteEnvVar', async (_, cliType: unknown, key: unknown) => {
+    await configService.deleteEnvVar(assertCLIType(cliType), assertNonEmptyString(key, 'key'));
   });
 
   // Settings.json handler for Claude
@@ -216,8 +254,8 @@ function setupIPCHandlers(): void {
     return configService.getSettings();
   });
 
-  ipcMain.handle('config:setSettings', async (_, settings: Record<string, unknown>) => {
-    await configService.setSettings(settings);
+  ipcMain.handle('config:setSettings', async (_, settings: unknown) => {
+    await configService.setSettings(assertPlainObject(settings, 'settings'));
   });
 
   // Apps.json handler for Copilot
@@ -225,8 +263,8 @@ function setupIPCHandlers(): void {
     return configService.getApps();
   });
 
-  ipcMain.handle('config:setApps', async (_, apps: Record<string, unknown>) => {
-    await configService.setApps(apps);
+  ipcMain.handle('config:setApps', async (_, apps: unknown) => {
+    await configService.setApps(assertPlainObject(apps, 'apps'));
   });
 
   // Config.json handler for Codex
@@ -234,8 +272,8 @@ function setupIPCHandlers(): void {
     return configService.getCodexConfig();
   });
 
-  ipcMain.handle('config:setCodexConfig', async (_, content: string) => {
-    await configService.setCodexConfig(content);
+  ipcMain.handle('config:setCodexConfig', async (_, content: unknown) => {
+    await configService.setCodexConfig(assertString(content, 'content'));
   });
 
   // Settings.json handler for Qoder
@@ -243,49 +281,56 @@ function setupIPCHandlers(): void {
     return configService.getQoderSettings();
   });
 
-  ipcMain.handle('config:setQoderSettings', async (_, settings: Record<string, unknown>) => {
-    await configService.setQoderSettings(settings);
+  ipcMain.handle('config:setQoderSettings', async (_, settings: unknown) => {
+    await configService.setQoderSettings(assertPlainObject(settings, 'settings'));
   });
 
   // Conversation handlers
-  ipcMain.handle('conversation:create', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder', sessionId: string, title?: string) => {
-    return conversationService.create(cliType, sessionId, title);
+  ipcMain.handle('conversation:create', async (_, cliType: unknown, sessionId: unknown, title?: unknown) => {
+    return conversationService.create(
+      assertCLIType(cliType),
+      assertNonEmptyString(sessionId, 'sessionId'),
+      assertOptionalString(title, 'title')
+    );
   });
 
-  ipcMain.handle('conversation:get', async (_, id: string) => {
-    return conversationService.get(id);
+  ipcMain.handle('conversation:get', async (_, id: unknown) => {
+    return conversationService.get(assertNonEmptyString(id, 'id'));
   });
 
-  ipcMain.handle('conversation:getWithMessages', async (_, id: string) => {
-    return conversationService.getWithMessages(id);
+  ipcMain.handle('conversation:getWithMessages', async (_, id: unknown) => {
+    return conversationService.getWithMessages(assertNonEmptyString(id, 'id'));
   });
 
-  ipcMain.handle('conversation:list', async (_, filter?: ConversationFilter) => {
-    return conversationService.list(filter);
+  ipcMain.handle('conversation:list', async (_, filter?: unknown) => {
+    return conversationService.list(assertConversationFilter(filter) as ConversationFilter | undefined);
   });
 
-  ipcMain.handle('conversation:addMessage', async (_, conversationId: string, message: Omit<ConversationMessage, 'id' | 'conversationId' | 'timestamp'>) => {
-    return conversationService.addMessage(conversationId, message);
+  ipcMain.handle('conversation:addMessage', async (_, conversationId: unknown, message: unknown) => {
+    return conversationService.addMessage(
+      assertNonEmptyString(conversationId, 'conversationId'),
+      assertConversationMessage(message) as Omit<ConversationMessage, 'id' | 'conversationId' | 'timestamp'>
+    );
   });
 
-  ipcMain.handle('conversation:updateTitle', async (_, id: string, title: string) => {
-    await conversationService.updateTitle(id, title);
+  ipcMain.handle('conversation:updateTitle', async (_, id: unknown, title: unknown) => {
+    await conversationService.updateTitle(assertNonEmptyString(id, 'id'), assertNonEmptyString(title, 'title'));
   });
 
-  ipcMain.handle('conversation:delete', async (_, id: string) => {
-    await conversationService.delete(id);
+  ipcMain.handle('conversation:delete', async (_, id: unknown) => {
+    await conversationService.delete(assertNonEmptyString(id, 'id'));
   });
 
-  ipcMain.handle('conversation:toggleFavorite', async (_, id: string) => {
-    await conversationService.toggleFavorite(id);
+  ipcMain.handle('conversation:toggleFavorite', async (_, id: unknown) => {
+    await conversationService.toggleFavorite(assertNonEmptyString(id, 'id'));
   });
 
-  ipcMain.handle('conversation:getMessages', async (_, conversationId: string) => {
-    return conversationService.getMessages(conversationId);
+  ipcMain.handle('conversation:getMessages', async (_, conversationId: unknown) => {
+    return conversationService.getMessages(assertNonEmptyString(conversationId, 'conversationId'));
   });
 
-  ipcMain.handle('conversation:getActiveForSession', async (_, sessionId: string) => {
-    return conversationService.getActiveConversationForSession(sessionId);
+  ipcMain.handle('conversation:getActiveForSession', async (_, sessionId: unknown) => {
+    return conversationService.getActiveConversationForSession(assertNonEmptyString(sessionId, 'sessionId'));
   });
 
   // Listen for conversation events from terminal service

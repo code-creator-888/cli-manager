@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../stores';
 
 export const ConfigPanel: React.FC = () => {
-  const { activeCLI } = useAppStore();
-  const [settings, setSettings] = useState<Record<string, unknown>>({});
+  const { activeCLI, addNotification } = useAppStore();
   const [settingsPath, setSettingsPath] = useState('');
-  const [apps, setApps] = useState<Record<string, unknown>>({});
   const [appsPath, setAppsPath] = useState('');
-  const [codexConfig, setCodexConfig] = useState<string>('');
   const [codexConfigPath, setCodexConfigPath] = useState('');
-  const [qoderSettings, setQoderSettings] = useState<Record<string, unknown>>({});
   const [qoderSettingsPath, setQoderSettingsPath] = useState('');
+  const [configText, setConfigText] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -21,26 +21,33 @@ export const ConfigPanel: React.FC = () => {
   const loadConfig = async () => {
     if (!window.cliManagerAPI) return;
     setIsLoading(true);
+    setLoadError(null);
+    setSaveError(null);
+    setSaveMessage(null);
     try {
       if (activeCLI === 'claude') {
         const result = await window.cliManagerAPI.config.getSettings();
-        setSettings(result.content || {});
         setSettingsPath(result.path);
+        setConfigText(JSON.stringify(result.content || {}, null, 2));
       } else if (activeCLI === 'copilot') {
         const result = await window.cliManagerAPI.config.getApps();
-        setApps(result.content || {});
         setAppsPath(result.path);
+        setConfigText(JSON.stringify(result.content || {}, null, 2));
       } else if (activeCLI === 'codex') {
         const result = await window.cliManagerAPI.config.getCodexConfig();
-        setCodexConfig(result.content || '');
         setCodexConfigPath(result.path);
+        setConfigText(result.content || '');
       } else if (activeCLI === 'qoder') {
         const result = await window.cliManagerAPI.config.getQoderSettings();
-        setQoderSettings(result.content || {});
         setQoderSettingsPath(result.path);
+        setConfigText(JSON.stringify(result.content || {}, null, 2));
       }
     } catch (e) {
       console.error('Failed to load config:', e);
+      const message = e instanceof Error ? e.message : String(e);
+      setLoadError(message);
+      addNotification({ type: 'error', message: `Failed to load configuration: ${message}` });
+      setConfigText('');
     } finally {
       setIsLoading(false);
     }
@@ -49,18 +56,28 @@ export const ConfigPanel: React.FC = () => {
   const saveConfig = async () => {
     if (!window.cliManagerAPI) return;
     setIsSaving(true);
+    setSaveError(null);
+    setSaveMessage(null);
     try {
       if (activeCLI === 'claude') {
-        await window.cliManagerAPI.config.setSettings(settings);
+        const parsed = JSON.parse(configText) as Record<string, unknown>;
+        await window.cliManagerAPI.config.setSettings(parsed);
       } else if (activeCLI === 'copilot') {
-        await window.cliManagerAPI.config.setApps(apps);
+        const parsed = JSON.parse(configText) as Record<string, unknown>;
+        await window.cliManagerAPI.config.setApps(parsed);
       } else if (activeCLI === 'codex') {
-        await window.cliManagerAPI.config.setCodexConfig(codexConfig);
+        await window.cliManagerAPI.config.setCodexConfig(configText);
       } else if (activeCLI === 'qoder') {
-        await window.cliManagerAPI.config.setQoderSettings(qoderSettings);
+        const parsed = JSON.parse(configText) as Record<string, unknown>;
+        await window.cliManagerAPI.config.setQoderSettings(parsed);
       }
+      setSaveMessage('Saved successfully.');
+      addNotification({ type: 'success', message: 'Configuration saved successfully.' });
     } catch (e) {
       console.error('Failed to save config:', e);
+      const message = e instanceof Error ? e.message : String(e);
+      setSaveError(message);
+      addNotification({ type: 'error', message: `Failed to save configuration: ${message}` });
     } finally {
       setIsSaving(false);
     }
@@ -75,8 +92,6 @@ export const ConfigPanel: React.FC = () => {
   }
 
   const currentPath = activeCLI === 'claude' ? settingsPath : activeCLI === 'copilot' ? appsPath : activeCLI === 'codex' ? codexConfigPath : qoderSettingsPath;
-  const currentConfig = activeCLI === 'claude' ? settings : activeCLI === 'copilot' ? apps : activeCLI === 'codex' ? codexConfig : qoderSettings;
-  const setConfig = activeCLI === 'claude' ? setSettings : activeCLI === 'copilot' ? setApps : activeCLI === 'codex' ? setCodexConfig : setQoderSettings;
   const configTitle = activeCLI === 'claude' ? 'Settings' : activeCLI === 'copilot' ? 'Apps' : activeCLI === 'codex' ? 'Config' : 'Settings';
 
   const cliTitle = activeCLI === 'claude' ? 'Claude CLI' : activeCLI === 'copilot' ? 'Copilot CLI' : activeCLI === 'codex' ? 'Codex CLI' : 'Qoder CLI';
@@ -91,25 +106,36 @@ export const ConfigPanel: React.FC = () => {
           Path: <code className="bg-bg-tertiary px-1 rounded">{currentPath}</code>
         </p>
 
+        {loadError && (
+          <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
+            Failed to load configuration: {loadError}
+          </div>
+        )}
+
+        {saveError && (
+          <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
+            Failed to save configuration: {saveError}
+          </div>
+        )}
+
+        {saveMessage && (
+          <div className="mb-4 rounded-lg border border-green-500/40 bg-green-500/10 p-3 text-sm text-green-300">
+            {saveMessage}
+          </div>
+        )}
+
         <div className="mb-8">
           <h3 className="text-lg font-medium text-text-primary mb-3">{configTitle} File</h3>
           <textarea
-            value={activeCLI === 'codex' ? codexConfig : JSON.stringify(currentConfig, null, 2)}
+            value={configText}
             onChange={(e) => {
-              if (activeCLI === 'codex') {
-                // Codex 使用 TOML，直接保存字符串
-                setCodexConfig(e.target.value);
-              } else {
-                try {
-                  const parsed = JSON.parse(e.target.value);
-                  setConfig(parsed);
-                } catch {
-                  // Invalid JSON, keep the current state
-                }
-              }
+              setConfigText(e.target.value);
+              setSaveError(null);
+              setSaveMessage(null);
             }}
             className="w-full h-96 bg-bg-secondary text-text-primary font-mono text-sm p-4 rounded-lg border border-bg-tertiary focus:outline-none focus:border-blue-500 resize-none"
             spellCheck={false}
+            disabled={loadError !== null}
           />
           <div className="mt-2 flex justify-end">
             <button

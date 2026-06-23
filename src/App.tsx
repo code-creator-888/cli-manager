@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Sidebar, Header } from './components/Layout';
 import { TerminalPanel } from './components/Terminal';
 import { ConfigPanel } from './components/ConfigPanel';
+import { ConversationPanel } from './components/ConversationPanel';
+import { Dashboard } from './components/Dashboard';
+import { NotificationCenter } from './components/Notifications';
 import { useAppStore } from './stores';
 import { SidebarView } from './components/Layout/Sidebar';
 
 const App: React.FC = () => {
-  const [activeView, setActiveView] = useState<SidebarView>('terminal');
-  const { activeCLI, updateStatus } = useAppStore();
+  const [activeView, setActiveView] = useState<SidebarView>('dashboard');
+  const { updateStatus, addNotification } = useAppStore();
 
   // Check CLI status
   useEffect(() => {
@@ -21,13 +24,17 @@ const App: React.FC = () => {
         });
       } catch (e) {
         console.error('Failed to check status:', e);
+        addNotification({
+          type: 'error',
+          message: `Failed to check CLI status: ${e instanceof Error ? e.message : String(e)}`,
+        });
       }
     };
 
     checkStatus();
     const interval = setInterval(checkStatus, 30000);
     return () => clearInterval(interval);
-  }, [updateStatus]);
+  }, [updateStatus, addNotification]);
 
   const renderContent = () => {
     return (
@@ -36,10 +43,26 @@ const App: React.FC = () => {
         <div style={{
           position: 'absolute',
           inset: 0,
+          display: activeView === 'dashboard' ? 'flex' : 'none',
+          overflow: 'hidden'
+        }}>
+          <Dashboard />
+        </div>
+        <div style={{
+          position: 'absolute',
+          inset: 0,
           display: activeView === 'terminal' ? 'flex' : 'none',
           overflow: 'hidden'
         }}>
           <TerminalPanel />
+        </div>
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: activeView === 'conversation' ? 'flex' : 'none',
+          overflow: 'hidden'
+        }}>
+          <ConversationPanel />
         </div>
         <div style={{
           position: 'absolute',
@@ -64,6 +87,7 @@ const App: React.FC = () => {
       fontFamily: 'system-ui, sans-serif'
     }}>
       <Sidebar activeView={activeView} onViewChange={setActiveView} />
+      <NotificationCenter />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <Header activeView={activeView} />
         <main style={{ flex: 1, overflow: 'hidden', display: 'flex', minHeight: 0 }}>{renderContent()}</main>

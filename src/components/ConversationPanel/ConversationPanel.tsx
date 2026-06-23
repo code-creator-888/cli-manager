@@ -1,50 +1,48 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../../stores';
-import { Conversation, ConversationMessage, ConversationWithMessages } from '../../types';
+import { ConversationWithMessages } from '../../types';
 import { MessageBubble } from './MessageBubble';
 
 export const ConversationPanel: React.FC = () => {
-  const { activeCLI, activeConversationId, conversations, setActiveConversation, setConversations, addConversation, updateConversation, removeConversation, conversationMessages, setConversationMessages, addConversationMessage } = useAppStore();
+  const { activeCLI, conversations, setActiveConversation, setConversations, removeConversation, setConversationMessages, addNotification } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showFavorites, setShowFavorites] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<ConversationWithMessages | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const loadConversationsRef = useRef<() => void>(() => undefined);
 
-  // Load conversations on mount and when filter changes
   useEffect(() => {
-    loadConversations();
-  }, [activeCLI, search, showFavorites]);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   // Subscribe to conversation events
   useEffect(() => {
     if (!window.cliManagerAPI) return;
 
     const unsubscribeCreated = window.cliManagerAPI.conversation.onCreated(
-      (sessionId, conversationId) => {
+      () => {
         // Reload conversations when a new one is created
-        loadConversations();
+        loadConversationsRef.current();
       }
     );
 
     const unsubscribeMessage = window.cliManagerAPI.conversation.onMessage(
       (conversationId, message) => {
-        // Add message to the conversation
-        addConversationMessage(conversationId, message);
-
-        // Update conversation's updatedAt and messageCount
-        updateConversation(conversationId, {
-          updatedAt: new Date(),
-          messageCount: (conversations[conversationId]?.messageCount || 0) + 1,
-        });
+        useAppStore.getState().addConversationMessage(conversationId, message);
 
         // If this is the selected conversation, update it
-        if (selectedConversation?.id === conversationId) {
+        if (useAppStore.getState().activeConversationId === conversationId) {
           setSelectedConversation(prev => prev ? {
             ...prev,
             messages: [...prev.messages, message],
-            updatedAt: new Date(),
+            updatedAt: message.timestamp,
             messageCount: prev.messageCount + 1,
           } : null);
         }
@@ -55,30 +53,43 @@ export const ConversationPanel: React.FC = () => {
       unsubscribeCreated();
       unsubscribeMessage();
     };
-  }, [addConversationMessage, updateConversation, conversations, selectedConversation]);
+  }, []);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedConversation?.messages]);
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     if (!window.cliManagerAPI) return;
     setIsLoading(true);
     try {
       const result = await window.cliManagerAPI.conversation.list({
         cliType: activeCLI,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         favorites: showFavorites || undefined,
         limit: 50,
       });
       setConversations(result);
     } catch (e) {
       console.error('Failed to load conversations:', e);
+      addNotification({
+        type: 'error',
+        message: `Failed to load conversations: ${e instanceof Error ? e.message : String(e)}`,
+      });
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [activeCLI, debouncedSearch, showFavorites, setConversations, addNotification]);
+
+  // Load conversations on mount and when filter changes
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    loadConversationsRef.current = loadConversations;
+  }, [loadConversations]);
 
   const loadConversationDetails = async (id: string) => {
     if (!window.cliManagerAPI) return;
@@ -91,6 +102,10 @@ export const ConversationPanel: React.FC = () => {
       }
     } catch (e) {
       console.error('Failed to load conversation details:', e);
+      addNotification({
+        type: 'error',
+        message: `Failed to load conversation details: ${e instanceof Error ? e.message : String(e)}`,
+      });
     }
   };
 
@@ -99,12 +114,16 @@ export const ConversationPanel: React.FC = () => {
     if (!window.cliManagerAPI) return;
     try {
       await window.cliManagerAPI.conversation.toggleFavorite(id);
-      updateConversation(id, { favorite: !conversations[id]?.favorite });
+      useAppStore.getState().updateConversation(id, { favorite: !conversations[id]?.favorite });
       if (selectedConversation?.id === id) {
         setSelectedConversation(prev => prev ? { ...prev, favorite: !prev.favorite } : null);
       }
     } catch (e) {
       console.error('Failed to toggle favorite:', e);
+      addNotification({
+        type: 'error',
+        message: `Failed to update favorite: ${e instanceof Error ? e.message : String(e)}`,
+      });
     }
   };
 
@@ -120,6 +139,10 @@ export const ConversationPanel: React.FC = () => {
       }
     } catch (e) {
       console.error('Failed to delete conversation:', e);
+      addNotification({
+        type: 'error',
+        message: `Failed to delete conversation: ${e instanceof Error ? e.message : String(e)}`,
+      });
     }
   };
 

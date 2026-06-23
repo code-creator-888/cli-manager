@@ -2,7 +2,13 @@ import React, { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
+import { subscribeTerminalData } from '../../utils/terminalDataBus';
 import 'xterm/css/xterm.css';
+
+const TERMINAL_SCROLLBACK_LINES = 5000;
+const MAX_PENDING_OUTPUT_CHARS = 1024 * 1024;
+const MAX_WRITE_CHARS_PER_FRAME = 64 * 1024;
+const OUTPUT_TRUNCATION_NOTICE = '\r\n[CLI Manager] Terminal output was truncated to protect memory.\r\n';
 
 interface TerminalViewProps {
   sessionId: string;
@@ -21,7 +27,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const onResizeRef = useRef(onResize);
+  const onDataRef = useRef(onData);
+  const pendingOutputRef = useRef<string[]>([]);
+  const pendingOutputLengthRef = useRef(0);
+  const flushFrameRef = useRef<number | null>(null);
+  const wroteTruncationNoticeRef = useRef(false);
   onResizeRef.current = onResize;
+  onDataRef.current = onData;
 
   const syncTerminalSize = () => {
     if (!containerRef.current || !fitAddonRef.current || !xtermRef.current) return;
@@ -45,7 +57,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       if (wasAtBottom) {
         xterm.scrollToBottom();
       }
-    } catch (e) {
+    } catch {
       // Ignore resize errors
     }
   };
@@ -85,7 +97,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       lineHeight: 1.2,
       cursorBlink: true,
       cursorStyle: 'block',
-      scrollback: 10000,
+      scrollback: TERMINAL_SCROLLBACK_LINES,
       allowTransparency: true,
     });
 
@@ -106,9 +118,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     // Handle user input
     const dataDisposable = xterm.onData((data) => {
-      if (onData) {
-        onData(data);
-      }
+      onDataRef.current?.(data);
     });
 
     // Handle window resize
@@ -123,6 +133,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       window.removeEventListener('resize', handleWindowResize);
       dataDisposable.dispose();
       xterm.dispose();
+      if (flushFrameRef.current !== null) {
+        cancelAnimationFrame(flushFrameRef.current);
+        flushFrameRef.current = null;
+      }
+      pendingOutputRef.current = [];
+      pendingOutputLengthRef.current = 0;
+      wroteTruncationNoticeRef.current = false;
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
@@ -130,22 +147,81 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   // Handle incoming data from backend
   useEffect(() => {
-    if (!window.cliManagerAPI) return;
+    const flushOutput = () => {
+      flushFrameRef.current = null;
+      const xterm = xtermRef.current;
+      if (!xterm) {
+        pendingOutputRef.current = [];
+        pendingOutputLengthRef.current = 0;
+        return;
+      }
 
-    const cleanup = window.cliManagerAPI.terminal.onData(
+      const buffer = xterm.buffer.active;
+      const wasAtBottom = buffer.viewportY >= buffer.length - xterm.rows;
+      let writtenChars = 0;
+
+      while (pendingOutputRef.current.length > 0 && writtenChars < MAX_WRITE_CHARS_PER_FRAME) {
+        const next = pendingOutputRef.current[0];
+        const remainingFrameChars = MAX_WRITE_CHARS_PER_FRAME - writtenChars;
+        const chunk = next.length > remainingFrameChars ? next.slice(0, remainingFrameChars) : next;
+
+        xterm.write(chunk);
+        writtenChars += chunk.length;
+        pendingOutputLengthRef.current -= chunk.length;
+
+        if (chunk.length === next.length) {
+          pendingOutputRef.current.shift();
+        } else {
+          pendingOutputRef.current[0] = next.slice(chunk.length);
+        }
+      }
+
+      if (wasAtBottom) {
+        requestAnimationFrame(() => {
+          xterm.scrollToBottom();
+        });
+      }
+
+      if (pendingOutputRef.current.length > 0) {
+        flushFrameRef.current = requestAnimationFrame(flushOutput);
+      }
+    };
+
+    const scheduleFlush = () => {
+      if (flushFrameRef.current === null) {
+        flushFrameRef.current = requestAnimationFrame(flushOutput);
+      }
+    };
+
+    const enqueueOutput = (data: string) => {
+      pendingOutputRef.current.push(data);
+      pendingOutputLengthRef.current += data.length;
+
+      if (pendingOutputLengthRef.current > MAX_PENDING_OUTPUT_CHARS) {
+        let droppedChars = 0;
+        while (
+          pendingOutputRef.current.length > 0 &&
+          pendingOutputLengthRef.current > MAX_PENDING_OUTPUT_CHARS
+        ) {
+          const dropped = pendingOutputRef.current.shift()!;
+          droppedChars += dropped.length;
+          pendingOutputLengthRef.current -= dropped.length;
+        }
+
+        if (droppedChars > 0 && !wroteTruncationNoticeRef.current) {
+          pendingOutputRef.current.unshift(OUTPUT_TRUNCATION_NOTICE);
+          pendingOutputLengthRef.current += OUTPUT_TRUNCATION_NOTICE.length;
+          wroteTruncationNoticeRef.current = true;
+        }
+      }
+
+      scheduleFlush();
+    };
+
+    const cleanup = subscribeTerminalData(
       (sid: string, data: string) => {
         if (sid === sessionId && xtermRef.current) {
-          const xterm = xtermRef.current;
-          const buffer = xterm.buffer.active;
-          const wasAtBottom = buffer.viewportY >= buffer.length - xterm.rows;
-
-          xterm.write(data);
-
-          if (wasAtBottom) {
-            requestAnimationFrame(() => {
-              xterm.scrollToBottom();
-            });
-          }
+          enqueueOutput(data);
         }
       }
     );

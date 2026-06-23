@@ -1,27 +1,26 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import type { CLIConfig, CLIType } from '../../shared/ipc';
 
-export type CLIType = 'claude' | 'copilot' | 'codex' | 'qoder';
-
-export interface CLIConfig {
-  cliType: CLIType;
-  configPath: string;
-  config: Record<string, unknown>;
-  envVars: Record<string, string>;
-}
+type ConfigPaths = Record<CLIType, string>;
 
 export class ConfigService {
-  private configPaths: Record<CLIType, string>;
+  private configPaths: ConfigPaths;
 
-  constructor() {
-    this.configPaths = {
+  constructor(configPaths?: Partial<ConfigPaths>) {
+    const defaultConfigPaths: ConfigPaths = {
       claude: path.join(os.homedir(), '.claude'),
       copilot: os.platform() === 'win32'
         ? path.join(process.env.APPDATA || '', 'github-copilot')
         : path.join(os.homedir(), '.config', 'github-copilot'),
       codex: path.join(os.homedir(), '.codex'),
       qoder: path.join(os.homedir(), '.qoder'),
+    };
+
+    this.configPaths = {
+      ...defaultConfigPaths,
+      ...configPaths,
     };
   }
 
@@ -37,12 +36,7 @@ export class ConfigService {
   // Settings.json methods for Claude
   async getSettings(): Promise<{ path: string; content: Record<string, unknown> }> {
     const settingsPath = this.getSettingsPath();
-    try {
-      const content = await fs.promises.readFile(settingsPath, 'utf-8');
-      return { path: settingsPath, content: JSON.parse(content) };
-    } catch {
-      return { path: settingsPath, content: {} };
-    }
+    return { path: settingsPath, content: await this.readJsonFile(settingsPath, {}) };
   }
 
   async setSettings(settings: Record<string, unknown>): Promise<void> {
@@ -53,12 +47,7 @@ export class ConfigService {
   // Apps.json methods for Copilot
   async getApps(): Promise<{ path: string; content: Record<string, unknown> }> {
     const appsPath = this.getAppsPath();
-    try {
-      const content = await fs.promises.readFile(appsPath, 'utf-8');
-      return { path: appsPath, content: JSON.parse(content) };
-    } catch {
-      return { path: appsPath, content: {} };
-    }
+    return { path: appsPath, content: await this.readJsonFile(appsPath, {}) };
   }
 
   async setApps(apps: Record<string, unknown>): Promise<void> {
@@ -74,12 +63,7 @@ export class ConfigService {
 
   async getCodexConfig(): Promise<{ path: string; content: string }> {
     const configPath = this.getCodexConfigPath();
-    try {
-      const content = await fs.promises.readFile(configPath, 'utf-8');
-      return { path: configPath, content };
-    } catch {
-      return { path: configPath, content: '' };
-    }
+    return { path: configPath, content: await this.readTextFile(configPath, '') };
   }
 
   async setCodexConfig(content: string): Promise<void> {
@@ -94,12 +78,7 @@ export class ConfigService {
 
   async getQoderSettings(): Promise<{ path: string; content: Record<string, unknown> }> {
     const settingsPath = this.getQoderSettingsPath();
-    try {
-      const content = await fs.promises.readFile(settingsPath, 'utf-8');
-      return { path: settingsPath, content: JSON.parse(content) };
-    } catch {
-      return { path: settingsPath, content: {} };
-    }
+    return { path: settingsPath, content: await this.readJsonFile(settingsPath, {}) };
   }
 
   async setQoderSettings(settings: Record<string, unknown>): Promise<void> {
@@ -134,14 +113,7 @@ export class ConfigService {
 
   async setEnvVar(cliType: CLIType, key: string, value: string): Promise<void> {
     const envPath = path.join(this.configPaths[cliType], 'env.json');
-    let envVars: Record<string, string> = {};
-
-    try {
-      const content = await fs.promises.readFile(envPath, 'utf-8');
-      envVars = JSON.parse(content);
-    } catch {
-      // File doesn't exist
-    }
+    const envVars = await this.readJsonFile<Record<string, string>>(envPath, {});
 
     envVars[key] = value;
     await this.writeFileSafely(envPath, JSON.stringify(envVars, null, 2));
@@ -149,50 +121,58 @@ export class ConfigService {
 
   async deleteEnvVar(cliType: CLIType, key: string): Promise<void> {
     const envPath = path.join(this.configPaths[cliType], 'env.json');
-    try {
-      const content = await fs.promises.readFile(envPath, 'utf-8');
-      const envVars: Record<string, string> = JSON.parse(content);
-      delete envVars[key];
-      await this.writeFileSafely(envPath, JSON.stringify(envVars, null, 2));
-    } catch {
-      // File doesn't exist, nothing to delete
+    if (!fs.existsSync(envPath)) {
+      return;
     }
+
+    const envVars = await this.readJsonFile<Record<string, string>>(envPath, {});
+    delete envVars[key];
+    await this.writeFileSafely(envPath, JSON.stringify(envVars, null, 2));
   }
 
   async getEnvVar(cliType: CLIType, key: string): Promise<string | null> {
     const envPath = path.join(this.configPaths[cliType], 'env.json');
-    try {
-      const content = await fs.promises.readFile(envPath, 'utf-8');
-      const envVars: Record<string, string> = JSON.parse(content);
-      return envVars[key] || null;
-    } catch {
-      return null;
-    }
+    const envVars = await this.readJsonFile<Record<string, string>>(envPath, {});
+    return envVars[key] || null;
   }
 
   private async loadConfig(cliType: CLIType): Promise<Record<string, unknown>> {
     const configPath = path.join(this.configPaths[cliType], 'config.json');
-
-    try {
-      const content = await fs.promises.readFile(configPath, 'utf-8');
-      return JSON.parse(content);
-    } catch {
-      return {};
-    }
+    return this.readJsonFile(configPath, {});
   }
 
   private async loadEnvVars(cliType: CLIType): Promise<Record<string, string>> {
     const envPath = path.join(this.configPaths[cliType], 'env.json');
-    const envVars: Record<string, string> = {};
+    return this.readJsonFile(envPath, {});
+  }
 
+  private async readTextFile(filePath: string, missingDefault: string): Promise<string> {
     try {
-      const content = await fs.promises.readFile(envPath, 'utf-8');
-      Object.assign(envVars, JSON.parse(content));
-    } catch {
-      // File doesn't exist
+      return await fs.promises.readFile(filePath, 'utf-8');
+    } catch (error) {
+      if (this.isMissingFileError(error)) {
+        return missingDefault;
+      }
+
+      throw error;
+    }
+  }
+
+  private async readJsonFile<T extends Record<string, unknown>>(filePath: string, missingDefault: T): Promise<T> {
+    const content = await this.readTextFile(filePath, '');
+    if (!content) {
+      return missingDefault;
     }
 
-    return envVars;
+    try {
+      return JSON.parse(content) as T;
+    } catch (error) {
+      throw new Error(`Invalid JSON in ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private isMissingFileError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
   }
 
   private async ensureDir(dir: string): Promise<void> {
@@ -228,6 +208,10 @@ export class ConfigService {
       }
 
       throw error;
+    }
+
+    if (originalExists && fs.existsSync(backupPath)) {
+      await fs.promises.unlink(backupPath);
     }
   }
 

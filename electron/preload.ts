@@ -1,38 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
-
-// Types
-interface ConversationMessage {
-  id: string;
-  conversationId: string;
-  role: 'user' | 'assistant' | 'tool';
-  content: string;
-  timestamp: Date;
-  metadata?: {
-    toolName?: string;
-    toolArgs?: Record<string, unknown>;
-    toolResult?: string;
-  };
-}
-
-interface ConversationFilter {
-  cliType?: 'claude' | 'copilot' | 'codex' | 'qoder';
-  favorite?: boolean;
-  limit?: number;
-  offset?: number;
-}
-
-type CLITypes = 'claude' | 'copilot' | 'codex' | 'qoder';
+import type { CLIManagerAPI, CLIType, ConversationFilter, ConversationMessage } from '../shared/ipc';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
-contextBridge.exposeInMainWorld('cliManagerAPI', {
+const api: CLIManagerAPI = {
   app: {
     quit: () => ipcRenderer.send('app:quit'),
   },
 
   // Terminal operations
   terminal: {
-    create: (cliType: CLITypes) =>
+    create: (cliType: CLIType) =>
       ipcRenderer.invoke('terminal:create', cliType),
 
     write: (sessionId: string, data: string) =>
@@ -59,7 +37,7 @@ contextBridge.exposeInMainWorld('cliManagerAPI', {
 
   // Status monitoring
   status: {
-    get: (cliType: CLITypes) =>
+    get: (cliType: CLIType) =>
       ipcRenderer.invoke('status:get', cliType),
 
     checkAll: () =>
@@ -68,16 +46,16 @@ contextBridge.exposeInMainWorld('cliManagerAPI', {
 
   // Configuration management
   config: {
-    get: (cliType: CLITypes) =>
+    get: (cliType: CLIType) =>
       ipcRenderer.invoke('config:get', cliType),
 
-    set: (cliType: CLITypes, config: Record<string, unknown>) =>
+    set: (cliType: CLIType, config: Record<string, unknown>) =>
       ipcRenderer.invoke('config:set', cliType, config),
 
-    setEnvVar: (cliType: CLITypes, key: string, value: string) =>
+    setEnvVar: (cliType: CLIType, key: string, value: string) =>
       ipcRenderer.invoke('config:setEnvVar', cliType, key, value),
 
-    deleteEnvVar: (cliType: CLITypes, key: string) =>
+    deleteEnvVar: (cliType: CLIType, key: string) =>
       ipcRenderer.invoke('config:deleteEnvVar', cliType, key),
 
     // Settings.json for Claude
@@ -111,7 +89,7 @@ contextBridge.exposeInMainWorld('cliManagerAPI', {
 
   // Conversation management
   conversation: {
-    create: (cliType: CLITypes, sessionId: string, title?: string) =>
+    create: (cliType: CLIType, sessionId: string, title?: string) =>
       ipcRenderer.invoke('conversation:create', cliType, sessionId, title),
 
     get: (id: string) =>
@@ -153,4 +131,6 @@ contextBridge.exposeInMainWorld('cliManagerAPI', {
       return () => ipcRenderer.removeListener('conversation:message', handler);
     },
   },
-});
+};
+
+contextBridge.exposeInMainWorld('cliManagerAPI', api);

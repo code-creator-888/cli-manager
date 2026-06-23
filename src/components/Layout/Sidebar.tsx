@@ -31,7 +31,19 @@ const settingsIcon = (
   </svg>
 );
 
-export type SidebarView = 'terminal' | 'config';
+const dashboardIcon = (
+  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
+  </svg>
+);
+
+const conversationIcon = (
+  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
+    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" />
+  </svg>
+);
+
+export type SidebarView = 'dashboard' | 'terminal' | 'conversation' | 'config';
 
 interface SidebarProps {
   activeView: SidebarView;
@@ -149,6 +161,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
       {/* View Selector */}
       <div className="flex flex-col gap-2 flex-1">
         <button
+          onClick={() => onViewChange('dashboard')}
+          className={`p-3 rounded-lg transition-all ${
+            activeView === 'dashboard'
+              ? 'bg-bg-tertiary text-text-primary'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+          title="Dashboard"
+        >
+          {dashboardIcon}
+        </button>
+
+        <button
           onClick={() => onViewChange('terminal')}
           className={`p-3 rounded-lg transition-all ${
             activeView === 'terminal'
@@ -160,6 +184,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor">
             <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10zm-2-1h-6v-2h6v2zM7.5 17l-1.41-1.41L8.67 13l-2.59-2.59L7.5 9l4 4-4 4z"/>
           </svg>
+        </button>
+
+        <button
+          onClick={() => onViewChange('conversation')}
+          className={`p-3 rounded-lg transition-all ${
+            activeView === 'conversation'
+              ? 'bg-bg-tertiary text-text-primary'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+          title="Conversations"
+        >
+          {conversationIcon}
         </button>
 
         <button

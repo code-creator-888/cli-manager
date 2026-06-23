@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { useAppStore } from '../stores';
 
 export const useTerminal = () => {

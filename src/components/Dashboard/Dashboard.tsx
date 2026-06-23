@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '../../stores';
+import { canCreateTerminalSession, getTerminalSessionLimitMessage } from '../../utils/sessionLimits';
+import type { CLIType } from '../../types';
 
 interface Stats {
   total: number;
@@ -11,16 +13,25 @@ interface Stats {
 }
 
 export const Dashboard: React.FC = () => {
-  const { statuses, updateStatus, addSession, setActiveCLI, setActiveSession } = useAppStore();
+  const { statuses, updateStatus, addSession, setActiveCLI, setActiveSession, sessions, addNotification } = useAppStore();
   const [stats, setStats] = useState<Stats>({ total: 0, claude: 0, copilot: 0, codex: 0, qoder: 0, favorites: 0 });
+  const [terminalError, setTerminalError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkStatus = async () => {
       if (window.cliManagerAPI) {
-        const statusList = await window.cliManagerAPI.status.checkAll();
-        statusList.forEach((status) => {
-          updateStatus(status.cliType, status);
-        });
+        try {
+          const statusList = await window.cliManagerAPI.status.checkAll();
+          statusList.forEach((status) => {
+            updateStatus(status.cliType, status);
+          });
+        } catch (e) {
+          console.error('Failed to check status:', e);
+          addNotification({
+            type: 'error',
+            message: `Failed to check CLI status: ${e instanceof Error ? e.message : String(e)}`,
+          });
+        }
       }
     };
 
@@ -28,7 +39,7 @@ export const Dashboard: React.FC = () => {
     const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
 
     return () => clearInterval(interval);
-  }, [updateStatus]);
+  }, [updateStatus, addNotification]);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -46,17 +57,29 @@ export const Dashboard: React.FC = () => {
           });
         } catch (e) {
           console.error('Failed to fetch stats:', e);
+          addNotification({
+            type: 'error',
+            message: `Failed to fetch dashboard stats: ${e instanceof Error ? e.message : String(e)}`,
+          });
         }
       }
     };
 
     fetchStats();
-  }, []);
+  }, [addNotification]);
 
-  const openTerminal = async (cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
+  const openTerminal = async (cliType: CLIType) => {
     if (!window.cliManagerAPI) return;
 
+    if (!canCreateTerminalSession(sessions, cliType)) {
+      const message = getTerminalSessionLimitMessage(cliType);
+      setTerminalError(message);
+      addNotification({ type: 'error', message });
+      return;
+    }
+
     try {
+      setTerminalError(null);
       const sessionId = await window.cliManagerAPI.terminal.create(cliType);
       addSession({
         id: sessionId,
@@ -68,6 +91,9 @@ export const Dashboard: React.FC = () => {
       setActiveSession(sessionId);
     } catch (error) {
       console.error(`Failed to create ${cliType} terminal session:`, error);
+      const message = error instanceof Error ? error.message : String(error);
+      setTerminalError(message);
+      addNotification({ type: 'error', message: `Failed to create ${cliType} terminal session: ${message}` });
     }
   };
 
@@ -192,6 +218,11 @@ export const Dashboard: React.FC = () => {
 
       {/* Quick Actions */}
       <h3 className="text-lg font-medium text-text-primary mb-4">Quick Actions</h3>
+      {terminalError && (
+        <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">
+          {terminalError}
+        </div>
+      )}
       <div className="grid grid-cols-4 gap-4">
         <button
           onClick={() => openTerminal('claude')}

@@ -1,7 +1,9 @@
 import Database from 'better-sqlite3';
 import * as crypto from 'crypto';
+import { buildFTSQuery } from './conversation-search';
 
 type CLIType = 'claude' | 'copilot' | 'codex' | 'qoder';
+const LATEST_SCHEMA_VERSION = 2;
 
 // Generate UUID v4 without external dependency
 function generateUUID(): string {
@@ -57,9 +59,37 @@ export class ConversationService {
 
   async initialize(): Promise<void> {
     this.db = new Database(this.dbPath);
+    this.db.pragma('foreign_keys = ON');
+    this.migrate();
+  }
 
-    // Create tables if they don't exist
-    this.db.exec(`
+  private migrate(): void {
+    const currentVersion = this.db!.pragma('user_version', { simple: true }) as number;
+
+    if (currentVersion > LATEST_SCHEMA_VERSION) {
+      throw new Error(
+        `Unsupported conversation database schema version ${currentVersion}; expected <= ${LATEST_SCHEMA_VERSION}.`
+      );
+    }
+
+    const runMigrations = this.db!.transaction(() => {
+      if (currentVersion < 1) {
+        this.createBaseSchema();
+        this.db!.pragma('user_version = 1');
+      }
+
+      if (currentVersion < 2) {
+        this.createSearchSchema();
+        this.rebuildSearchIndex();
+        this.db!.pragma('user_version = 2');
+      }
+    });
+
+    runMigrations();
+  }
+
+  private createBaseSchema(): void {
+    this.db!.exec(`
       CREATE TABLE IF NOT EXISTS conversations (
         id TEXT PRIMARY KEY,
         cli_type TEXT NOT NULL,
@@ -87,6 +117,61 @@ export class ConversationService {
       CREATE INDEX IF NOT EXISTS idx_conv_favorite ON conversations(favorite);
       CREATE INDEX IF NOT EXISTS idx_msg_conversation_id ON conversation_messages(conversation_id);
       CREATE INDEX IF NOT EXISTS idx_msg_timestamp ON conversation_messages(timestamp);
+    `);
+  }
+
+  private createSearchSchema(): void {
+    this.db!.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS conversation_search USING fts5(
+        conversation_id UNINDEXED,
+        entry_id UNINDEXED,
+        content,
+        tokenize = 'unicode61'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS trg_conversations_search_insert
+      AFTER INSERT ON conversations
+      WHEN NEW.title IS NOT NULL AND NEW.title != ''
+      BEGIN
+        INSERT INTO conversation_search (conversation_id, entry_id, content)
+        VALUES (NEW.id, 'conversation:' || NEW.id, NEW.title);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_conversations_search_update
+      AFTER UPDATE OF title ON conversations
+      BEGIN
+        DELETE FROM conversation_search WHERE entry_id = 'conversation:' || NEW.id;
+        INSERT INTO conversation_search (conversation_id, entry_id, content)
+        SELECT NEW.id, 'conversation:' || NEW.id, NEW.title
+        WHERE NEW.title IS NOT NULL AND NEW.title != '';
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_conversations_search_delete
+      AFTER DELETE ON conversations
+      BEGIN
+        DELETE FROM conversation_search WHERE conversation_id = OLD.id;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_messages_search_insert
+      AFTER INSERT ON conversation_messages
+      BEGIN
+        INSERT INTO conversation_search (conversation_id, entry_id, content)
+        VALUES (NEW.conversation_id, 'message:' || NEW.id, NEW.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_messages_search_update
+      AFTER UPDATE OF content ON conversation_messages
+      BEGIN
+        DELETE FROM conversation_search WHERE entry_id = 'message:' || NEW.id;
+        INSERT INTO conversation_search (conversation_id, entry_id, content)
+        VALUES (NEW.conversation_id, 'message:' || NEW.id, NEW.content);
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_messages_search_delete
+      AFTER DELETE ON conversation_messages
+      BEGIN
+        DELETE FROM conversation_search WHERE entry_id = 'message:' || OLD.id;
+      END;
     `);
   }
 
@@ -173,9 +258,13 @@ export class ConversationService {
       params.push(filter.sessionId);
     }
 
-    if (filter?.search) {
-      sql += ' AND (title LIKE ? OR id IN (SELECT conversation_id FROM conversation_messages WHERE content LIKE ?))';
-      params.push(`%${filter.search}%`, `%${filter.search}%`);
+    const ftsQuery = filter?.search ? buildFTSQuery(filter.search) : undefined;
+    if (ftsQuery) {
+      sql += ' AND id IN (SELECT conversation_id FROM conversation_search WHERE conversation_search MATCH ?)';
+      params.push(ftsQuery);
+    } else if (filter?.search?.trim()) {
+      // Non-empty search terms that produce no valid FTS tokens should return no matches.
+      sql += ' AND 0';
     }
 
     if (filter?.favorites) {
@@ -270,6 +359,21 @@ export class ConversationService {
     const firstLine = content.split('\n')[0].trim();
     if (firstLine.length <= 50) return firstLine;
     return firstLine.substring(0, 47) + '...';
+  }
+
+  private rebuildSearchIndex(): void {
+    this.db!.exec(`
+      DELETE FROM conversation_search;
+
+      INSERT INTO conversation_search (conversation_id, entry_id, content)
+      SELECT id, 'conversation:' || id, title
+      FROM conversations
+      WHERE title IS NOT NULL AND title != '';
+
+      INSERT INTO conversation_search (conversation_id, entry_id, content)
+      SELECT conversation_id, 'message:' || id, content
+      FROM conversation_messages;
+    `);
   }
 
   private rowToConversation(row: any): Conversation {

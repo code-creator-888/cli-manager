@@ -7,6 +7,7 @@ interface HeaderProps {
 }
 
 const viewTitles: Record<SidebarView, string> = {
+  dashboard: 'Dashboard',
   terminal: 'Terminal',
   conversation: 'Conversations',
   config: 'Configuration',
