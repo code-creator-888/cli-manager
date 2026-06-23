@@ -15,6 +15,9 @@ const viewTitles: Record<SidebarView, string> = {
 export const Header: React.FC<HeaderProps> = ({ activeView }) => {
   const { activeCLI, statuses } = useAppStore();
   const status = statuses[activeCLI];
+  const handleQuit = () => {
+    window.cliManagerAPI?.app.quit();
+  };
 
   return (
     <header className="h-12 bg-bg-secondary border-b border-bg-tertiary flex items-center px-4">
@@ -59,6 +62,13 @@ export const Header: React.FC<HeaderProps> = ({ activeView }) => {
             )}
           </div>
         )}
+        <button
+          onClick={handleQuit}
+          className="px-3 py-1.5 rounded bg-red-500/15 text-red-300 hover:bg-red-500/25 hover:text-red-200 transition-colors text-sm"
+          title="退出 CLI Manager"
+        >
+          退出
+        </button>
       </div>
     </header>
   );

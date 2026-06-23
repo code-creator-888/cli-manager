@@ -3,6 +3,9 @@ import { CLIStatus, CLIConfig, Conversation, ConversationMessage, ConversationFi
 declare global {
   interface Window {
     cliManagerAPI: {
+      app: {
+        quit: () => void;
+      };
       terminal: {
         create: (cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => Promise<string>;
         write: (sessionId: string, data: string) => void;

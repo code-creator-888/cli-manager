@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { TerminalService } from './services/terminal';
@@ -17,6 +17,7 @@ let codexService: CodexCLIService;
 let qoderService: QoderCLIService;
 let configService: ConfigService;
 let conversationService: ConversationService;
+let isQuitting = false;
 
 const devServerPort = process.env.CLI_MANAGER_DEV_PORT || '5173';
 const devServerUrl = `http://localhost:${devServerPort}`;
@@ -40,6 +41,28 @@ function getCommandForCLI(cliType: 'claude' | 'copilot' | 'codex' | 'qoder'): st
   }
 
   return command;
+}
+
+function cleanupAppResources(): void {
+  if (terminalService) {
+    terminalService.destroyAll();
+  }
+  if (conversationService) {
+    conversationService.close();
+  }
+}
+
+function quitApp(exitAfterCleanup = true): void {
+  if (isQuitting) {
+    return;
+  }
+
+  isQuitting = true;
+  cleanupAppResources();
+  BrowserWindow.getAllWindows().forEach((window) => window.destroy());
+  if (exitAfterCleanup) {
+    app.exit(0);
+  }
 }
 
 function createWindow(): void {
@@ -68,6 +91,13 @@ function createWindow(): void {
     mainWindow = null;
   });
 
+  mainWindow.on('close', (event) => {
+    if (!isQuitting && process.platform === 'darwin') {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+
   // Prevent opening files dropped into the window
   mainWindow.webContents.on('will-navigate', (event, url) => {
     // Only prevent file:// URLs (dragged files)
@@ -75,6 +105,21 @@ function createWindow(): void {
       event.preventDefault();
     }
   });
+}
+
+function setupAppMenu(): void {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        {
+          label: '退出 CLI Manager',
+          accelerator: 'CmdOrCtrl+Q',
+          click: () => quitApp(),
+        },
+      ],
+    },
+  ]));
 }
 
 // Initialize services
@@ -101,6 +146,8 @@ async function initializeServices(): Promise<void> {
 
 // Set up IPC handlers
 function setupIPCHandlers(): void {
+  ipcMain.on('app:quit', () => quitApp());
+
   // Terminal handlers
   ipcMain.handle('terminal:create', async (_, cliType: 'claude' | 'copilot' | 'codex' | 'qoder') => {
     const command = getCommandForCLI(cliType);
@@ -279,6 +326,7 @@ function setupIPCHandlers(): void {
 app.whenReady().then(async () => {
   await initializeServices();
   setupIPCHandlers();
+  setupAppMenu();
   createWindow();
 
   app.on('activate', () => {
@@ -289,14 +337,14 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  terminalService.destroyAll();
+  cleanupAppResources();
   if (process.platform !== 'darwin') {
-    app.quit();
+    quitApp();
   }
 });
 
 app.on('before-quit', () => {
-  terminalService.destroyAll();
+  quitApp(false);
 });
 
 // Types for IPC are handled in services/conversation.ts

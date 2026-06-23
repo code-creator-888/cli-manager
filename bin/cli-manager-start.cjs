@@ -65,7 +65,7 @@ function ensureNpmAvailable() {
   }
 }
 
-function canListenOnPort(port) {
+function canListenOnHost(port, host) {
   return new Promise((resolve) => {
     const server = net.createServer();
 
@@ -74,8 +74,21 @@ function canListenOnPort(port) {
       server.close(() => resolve(true));
     });
 
-    server.listen(port);
+    server.listen(port, host);
   });
+}
+
+async function canListenOnPort(port) {
+  const hosts = ['127.0.0.1', '::1'];
+
+  for (const host of hosts) {
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await canListenOnHost(port, host))) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 async function findAvailablePort(startPort) {

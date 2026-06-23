@@ -10,7 +10,7 @@
     "ensure:electron": "node scripts/ensure-electron.cjs",
     "postinstall": "npm run ensure:electron && electron-rebuild -f -w better-sqlite3,node-pty",
     "start:background": "node bin/cli-manager-start.cjs",
-    "dev": "npm run ensure:electron && npm run build:electron && concurrently \"vite\" \"electron .\"",
+    "dev": "npm run ensure:electron && npm run build:electron && concurrently --kill-others --success first \"vite\" \"electron .\"",
     "dev:vite": "vite",
     "build": "npm run build:electron && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
