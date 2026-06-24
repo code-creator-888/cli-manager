@@ -443,6 +443,15 @@ app.whenReady().then(async () => {
   createWindow();
 
   app.on('activate', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.show();
+      mainWindow.focus();
+      return;
+    }
+
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
