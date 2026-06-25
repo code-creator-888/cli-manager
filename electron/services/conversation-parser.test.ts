@@ -169,4 +169,14 @@ describe('ConversationParser', () => {
       },
     ]);
   });
+
+  it('caps internal buffer growth for oversized terminal chunks', () => {
+    const parser = new ConversationParser('copilot');
+
+    expect(() => {
+      parser.feed('x'.repeat(2 * 1024 * 1024));
+      parser.feed('\n');
+      parser.flush();
+    }).not.toThrow();
+  });
 });

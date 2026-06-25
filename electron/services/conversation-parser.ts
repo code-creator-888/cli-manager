@@ -18,6 +18,7 @@ export interface ConversationParserEvents {
 }
 
 type ParserState = 'idle' | 'collecting_user' | 'collecting_assistant' | 'collecting_tool';
+const MAX_PARSER_BUFFER_CHARS = 1024 * 1024;
 
 export class ConversationParser extends EventEmitter {
   private cliType: CLIType;
@@ -45,6 +46,15 @@ export class ConversationParser extends EventEmitter {
   }
 
   feed(data: string): void {
+    if (!data) {
+      return;
+    }
+
+    const overflow = this.buffer.length + data.length - MAX_PARSER_BUFFER_CHARS;
+    if (overflow > 0) {
+      this.buffer = overflow >= this.buffer.length ? '' : this.buffer.slice(overflow);
+    }
+
     this.buffer += data;
     this.processBuffer();
   }
