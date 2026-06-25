@@ -275,6 +275,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const imageFile = getPastedImageFile(event);
       if (imageFile) {
         event.preventDefault();
+        event.stopPropagation();
         void imageFile.arrayBuffer()
           .then((imageData) => pasteImageData(imageData))
           .catch(() => pasteClipboardImage());
@@ -284,6 +285,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const hasImage = window.cliManagerAPI?.clipboard.hasImage() ?? false;
       if (hasImage) {
         event.preventDefault();
+        event.stopPropagation();
         void pasteClipboardImage();
         return;
       }
@@ -291,6 +293,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       const text = event.clipboardData?.getData('text');
       if (text) {
         event.preventDefault();
+        event.stopPropagation();
         applyPastedText(text);
         return;
       }
@@ -321,7 +324,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       return !event.defaultPrevented;
     });
     containerRef.current.addEventListener('contextmenu', handleContextMenu);
-    containerRef.current.addEventListener('paste', handlePaste);
+    containerRef.current.addEventListener('paste', handlePaste, true);
     containerRef.current.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('copy', handleCopy, true);
     window.addEventListener('keydown', handleGlobalKeyDown, true);
@@ -337,7 +340,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       console.log('Cleaning up terminal for session:', sessionId);
       window.removeEventListener('resize', handleWindowResize);
       containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
-      containerRef.current?.removeEventListener('paste', handlePaste);
+      containerRef.current?.removeEventListener('paste', handlePaste, true);
       containerRef.current?.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('copy', handleCopy, true);
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
