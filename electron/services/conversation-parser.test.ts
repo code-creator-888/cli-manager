@@ -179,4 +179,15 @@ describe('ConversationParser', () => {
       parser.flush();
     }).not.toThrow();
   });
+
+  it('strictly caps the buffer when a single feed exceeds the limit', () => {
+    const parser = new ConversationParser('copilot');
+    const marker = '---end---';
+    const oversized = 'x'.repeat(3 * 1024 * 1024) + marker;
+
+    parser.feed(oversized);
+
+    expect(parser['buffer'].length).toBeLessThanOrEqual(1024 * 1024);
+    expect(parser['buffer'].endsWith(marker)).toBe(true);
+  });
 });

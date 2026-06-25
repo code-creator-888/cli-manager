@@ -232,6 +232,29 @@ function setupIPCHandlers(): void {
 
     const filePath = path.join(tempDir, `clipboard-${Date.now()}-${crypto.randomUUID()}.png`);
     await fs.promises.writeFile(filePath, png);
+
+    // Keep only the most recent pasted image to avoid unbounded disk growth.
+    const entries = await fs.promises.readdir(tempDir, { withFileTypes: true });
+    const imageFiles = entries
+      .filter((entry) => entry.isFile() && entry.name.startsWith('clipboard-') && entry.name.endsWith('.png'))
+      .map((entry) => ({
+        name: entry.name,
+        path: path.join(tempDir, entry.name),
+      }));
+
+    if (imageFiles.length > 1) {
+      const filesWithMtime = await Promise.all(
+        imageFiles.map(async (file) => {
+          const stats = await fs.promises.stat(file.path);
+          return { ...file, mtime: stats.mtimeMs };
+        })
+      );
+      filesWithMtime.sort((a, b) => b.mtime - a.mtime);
+      await Promise.all(
+        filesWithMtime.slice(1).map((file) => fs.promises.unlink(file.path))
+      );
+    }
+
     return filePath;
   };
 

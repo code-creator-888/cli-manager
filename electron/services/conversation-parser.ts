@@ -50,12 +50,16 @@ export class ConversationParser extends EventEmitter {
       return;
     }
 
-    const overflow = this.buffer.length + data.length - MAX_PARSER_BUFFER_CHARS;
-    if (overflow > 0) {
-      this.buffer = overflow >= this.buffer.length ? '' : this.buffer.slice(overflow);
+    const totalLength = this.buffer.length + data.length;
+    if (totalLength <= MAX_PARSER_BUFFER_CHARS) {
+      this.buffer += data;
+    } else if (data.length >= MAX_PARSER_BUFFER_CHARS) {
+      this.buffer = data.slice(-MAX_PARSER_BUFFER_CHARS);
+    } else {
+      const keepFromBuffer = MAX_PARSER_BUFFER_CHARS - data.length;
+      this.buffer = this.buffer.slice(-keepFromBuffer) + data;
     }
 
-    this.buffer += data;
     this.processBuffer();
   }
 
