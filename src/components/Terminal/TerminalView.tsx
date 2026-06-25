@@ -32,6 +32,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const pendingOutputLengthRef = useRef(0);
   const flushFrameRef = useRef<number | null>(null);
   const wroteTruncationNoticeRef = useRef(false);
+  const imagePasteInFlightRef = useRef(false);
   onResizeRef.current = onResize;
   onDataRef.current = onData;
 
@@ -132,12 +133,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const quoteTerminalPath = (filePath: string) => `"${filePath.replace(/"/g, '\\"')}"`;
 
     const pasteClipboardImage = async (): Promise<boolean> => {
-      const filePath = await window.cliManagerAPI?.clipboard.saveImageToTemp();
-      if (!filePath) {
-        return false;
+      if (imagePasteInFlightRef.current) {
+        return true;
       }
-      onDataRef.current?.(`${quoteTerminalPath(filePath)} `);
-      return true;
+      imagePasteInFlightRef.current = true;
+
+      try {
+        const filePath = await window.cliManagerAPI?.clipboard.saveImageToTemp();
+        if (!filePath) {
+          return false;
+        }
+        onDataRef.current?.(`${quoteTerminalPath(filePath)} `);
+        return true;
+      } finally {
+        imagePasteInFlightRef.current = false;
+      }
     };
 
     const applyPastedText = (text: string | undefined) => {
@@ -345,6 +355,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     const rafId = requestAnimationFrame(() => {
       syncTerminalSize();
+      xtermRef.current?.focus();
       requestAnimationFrame(() => {
         syncTerminalSize();
       });
