@@ -11,6 +11,8 @@ const api: CLIManagerAPI = {
   clipboard: {
     readText: () => clipboard.readText(),
     writeText: (text: string) => clipboard.writeText(text),
+    hasImage: () => !clipboard.readImage().isEmpty(),
+    saveImageToTemp: () => ipcRenderer.invoke('clipboard:saveImageToTemp'),
   },
 
   // Terminal operations

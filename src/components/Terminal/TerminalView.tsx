@@ -129,6 +129,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
 
+    const quoteTerminalPath = (filePath: string) => `"${filePath.replace(/"/g, '\\"')}"`;
+
+    const pasteClipboardImage = async (): Promise<boolean> => {
+      const filePath = await window.cliManagerAPI?.clipboard.saveImageToTemp();
+      if (!filePath) {
+        return false;
+      }
+      onDataRef.current?.(`${quoteTerminalPath(filePath)} `);
+      return true;
+    };
+
     const applyPastedText = (text: string | undefined) => {
       if (text) {
         // Use xterm built-in paste path so bracketed paste mode is respected.
@@ -137,7 +148,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     };
 
     const pasteClipboard = () => {
-      applyPastedText(window.cliManagerAPI?.clipboard.readText());
+      const text = window.cliManagerAPI?.clipboard.readText();
+      if (text) {
+        applyPastedText(text);
+        return;
+      }
+      void pasteClipboardImage();
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -147,6 +163,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         event.preventDefault();
         copySelection();
         return;
+      }
+
+      if (shortcutKey && key === 'v') {
+        const hasImage = window.cliManagerAPI?.clipboard.hasImage() ?? false;
+        if (hasImage) {
+          event.preventDefault();
+          void pasteClipboardImage();
+          return;
+        }
       }
 
       // Support common terminal paste shortcut on Linux/Windows.
@@ -166,12 +191,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     };
 
     const handlePaste = (event: ClipboardEvent) => {
+      const hasImage = window.cliManagerAPI?.clipboard.hasImage() ?? false;
+      if (hasImage) {
+        event.preventDefault();
+        void pasteClipboardImage();
+        return;
+      }
+
       const text = event.clipboardData?.getData('text');
-      if (!text) {
+      if (text) {
+        event.preventDefault();
+        applyPastedText(text);
         return;
       }
       event.preventDefault();
-      applyPastedText(text);
+      void pasteClipboardImage();
     };
 
     xterm.attachCustomKeyEventHandler((event) => {
@@ -180,6 +214,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
     containerRef.current.addEventListener('contextmenu', handleContextMenu);
     containerRef.current.addEventListener('paste', handlePaste);
+    containerRef.current.addEventListener('keydown', handleKeyDown, true);
 
     // Handle window resize
     const handleWindowResize = () => {
@@ -193,6 +228,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       window.removeEventListener('resize', handleWindowResize);
       containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
       containerRef.current?.removeEventListener('paste', handlePaste);
+      containerRef.current?.removeEventListener('keydown', handleKeyDown, true);
       dataDisposable.dispose();
       xterm.dispose();
       if (flushFrameRef.current !== null) {

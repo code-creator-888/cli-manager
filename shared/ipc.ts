@@ -94,6 +94,8 @@ export interface AppAPI {
 export interface ClipboardAPI {
   readText: () => string;
   writeText: (text: string) => void;
+  hasImage: () => boolean;
+  saveImageToTemp: () => Promise<string | null>;
 }
 
 export interface TerminalCreateResult {

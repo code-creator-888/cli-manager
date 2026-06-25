@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
@@ -221,6 +221,25 @@ async function initializeServices(): Promise<void> {
 // Set up IPC handlers
 function setupIPCHandlers(): void {
   ipcMain.on('app:quit', () => quitApp());
+
+  ipcMain.handle('clipboard:saveImageToTemp', async () => {
+    const image = clipboard.readImage();
+    if (image.isEmpty()) {
+      return null;
+    }
+
+    const png = image.toPNG();
+    if (png.length === 0) {
+      return null;
+    }
+
+    const tempDir = path.join(app.getPath('temp'), 'cli-manager-pasted-images');
+    await fs.promises.mkdir(tempDir, { recursive: true });
+
+    const filePath = path.join(tempDir, `clipboard-${Date.now()}-${crypto.randomUUID()}.png`);
+    await fs.promises.writeFile(filePath, png);
+    return filePath;
+  });
 
   // Terminal handlers
   ipcMain.handle('terminal:create', async (_, cliType: unknown) => {
