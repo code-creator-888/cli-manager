@@ -3,6 +3,7 @@ import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { subscribeTerminalData } from '../../utils/terminalDataBus';
+import type { CLIType } from '../../types';
 import 'xterm/css/xterm.css';
 
 const TERMINAL_SCROLLBACK_LINES = 5000;
@@ -12,6 +13,7 @@ const OUTPUT_TRUNCATION_NOTICE = '\r\n[CLI Manager] Terminal output was truncate
 
 interface TerminalViewProps {
   sessionId: string;
+  cliType: CLIType;
   isActive?: boolean;
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
@@ -19,6 +21,7 @@ interface TerminalViewProps {
 
 export const TerminalView: React.FC<TerminalViewProps> = ({
   sessionId,
+  cliType,
   isActive = false,
   onData,
   onResize,
@@ -33,8 +36,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const flushFrameRef = useRef<number | null>(null);
   const wroteTruncationNoticeRef = useRef(false);
   const imagePasteInFlightRef = useRef(false);
+  const isActiveRef = useRef(isActive);
   onResizeRef.current = onResize;
   onDataRef.current = onData;
+  isActiveRef.current = isActive;
 
   const syncTerminalSize = () => {
     if (!containerRef.current || !fitAddonRef.current || !xtermRef.current) return;
@@ -130,8 +135,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
 
-    const quoteTerminalPath = (filePath: string) => `"${filePath.replace(/"/g, '\\"')}"`;
-
     const pasteClipboardImage = async (): Promise<boolean> => {
       if (imagePasteInFlightRef.current) {
         return true;
@@ -139,12 +142,38 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       imagePasteInFlightRef.current = true;
 
       try {
-        const filePath = await window.cliManagerAPI?.clipboard.saveImageToTemp();
+        const filePath = await window.cliManagerAPI?.terminal.pasteClipboardImage(sessionId, cliType);
         if (!filePath) {
+          xterm.writeln('\r\n[CLI Manager] No clipboard image data was available to paste.');
           return false;
         }
-        onDataRef.current?.(`${quoteTerminalPath(filePath)} `);
+        xterm.focus();
         return true;
+      } catch (error) {
+        xterm.writeln(`\r\n[CLI Manager] Failed to paste clipboard image: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      } finally {
+        imagePasteInFlightRef.current = false;
+      }
+    };
+
+    const pasteImageData = async (imageData: ArrayBuffer): Promise<boolean> => {
+      if (imagePasteInFlightRef.current) {
+        return true;
+      }
+      imagePasteInFlightRef.current = true;
+
+      try {
+        const filePath = await window.cliManagerAPI?.terminal.pasteImageData(sessionId, cliType, imageData);
+        if (!filePath) {
+          xterm.writeln('\r\n[CLI Manager] Pasted image data could not be decoded.');
+          return false;
+        }
+        xterm.focus();
+        return true;
+      } catch (error) {
+        xterm.writeln(`\r\n[CLI Manager] Failed to paste image data: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
       } finally {
         imagePasteInFlightRef.current = false;
       }
@@ -158,6 +187,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     };
 
     const pasteClipboard = () => {
+      const hasImage = window.cliManagerAPI?.clipboard.hasImage() ?? false;
+      if (hasImage) {
+        void pasteClipboardImage();
+        return;
+      }
+
       const text = window.cliManagerAPI?.clipboard.readText();
       if (text) {
         applyPastedText(text);
@@ -167,6 +202,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isActiveRef.current) return;
+
       const shortcutKey = event.metaKey || (event.ctrlKey && !event.altKey);
       const key = event.key.toLowerCase();
       if (shortcutKey && key === 'c' && xterm.hasSelection()) {
@@ -200,7 +237,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
 
+    const getPastedImageFile = (event: ClipboardEvent): File | null => {
+      const items = Array.from(event.clipboardData?.items ?? []);
+      for (const item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          return item.getAsFile();
+        }
+      }
+
+      const files = Array.from(event.clipboardData?.files ?? []);
+      return files.find((file) => file.type.startsWith('image/')) ?? null;
+    };
+
     const handlePaste = (event: ClipboardEvent) => {
+      if (!isActiveRef.current) return;
+
+      const imageFile = getPastedImageFile(event);
+      if (imageFile) {
+        event.preventDefault();
+        void imageFile.arrayBuffer()
+          .then((imageData) => pasteImageData(imageData))
+          .catch(() => pasteClipboardImage());
+        return;
+      }
+
       const hasImage = window.cliManagerAPI?.clipboard.hasImage() ?? false;
       if (hasImage) {
         event.preventDefault();
@@ -214,8 +274,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         applyPastedText(text);
         return;
       }
-      event.preventDefault();
-      void pasteClipboardImage();
     };
 
     xterm.attachCustomKeyEventHandler((event) => {
@@ -225,6 +283,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     containerRef.current.addEventListener('contextmenu', handleContextMenu);
     containerRef.current.addEventListener('paste', handlePaste);
     containerRef.current.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('paste', handlePaste, true);
+    window.addEventListener('keydown', handleKeyDown, true);
 
     // Handle window resize
     const handleWindowResize = () => {
@@ -239,6 +299,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
       containerRef.current?.removeEventListener('paste', handlePaste);
       containerRef.current?.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('paste', handlePaste, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
       dataDisposable.dispose();
       xterm.dispose();
       if (flushFrameRef.current !== null) {
@@ -251,7 +313,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId]); // Re-initialize when sessionId changes
+  }, [sessionId, cliType]); // Re-initialize when sessionId or CLI type changes
 
   // Handle incoming data from backend
   useEffect(() => {

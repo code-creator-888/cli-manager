@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
@@ -10,6 +10,7 @@ import { QoderCLIService } from './services/qoder-cli';
 import { ConfigService } from './services/config';
 import { ConversationService, ConversationMessage, ConversationFilter } from './services/conversation';
 import type { CLIType } from '../shared/ipc';
+import { formatFilePathForCLI, getPastedImageDirectory } from '../shared/clipboard';
 import {
   assertCLIType,
   assertConversationFilter,
@@ -222,7 +223,41 @@ async function initializeServices(): Promise<void> {
 function setupIPCHandlers(): void {
   ipcMain.on('app:quit', () => quitApp());
 
-  ipcMain.handle('clipboard:saveImageToTemp', async () => {
+  const savePngToPastedImages = async (png: Buffer, cliType: CLIType | undefined) => {
+    const tempDir = getPastedImageDirectory(cliType, {
+      homeDir: app.getPath('home'),
+      tempDir: app.getPath('temp'),
+    });
+    await fs.promises.mkdir(tempDir, { recursive: true });
+
+    const filePath = path.join(tempDir, `clipboard-${Date.now()}-${crypto.randomUUID()}.png`);
+    await fs.promises.writeFile(filePath, png);
+    return filePath;
+  };
+
+  const imageDataToPng = (imageData: unknown): Buffer | null => {
+    if (!(imageData instanceof ArrayBuffer) && !ArrayBuffer.isView(imageData)) {
+      throw new Error('Invalid imageData: expected an ArrayBuffer.');
+    }
+
+    const imageBuffer = imageData instanceof ArrayBuffer
+      ? Buffer.from(imageData)
+      : Buffer.from(imageData.buffer, imageData.byteOffset, imageData.byteLength);
+    const image = nativeImage.createFromBuffer(imageBuffer);
+    if (image.isEmpty()) {
+      return null;
+    }
+
+    const png = image.toPNG();
+    return png.length === 0 ? null : png;
+  };
+
+  const pasteImageFileToTerminal = (sessionId: string, cliType: CLIType, filePath: string) => {
+    terminalService.write(sessionId, `${formatFilePathForCLI(cliType, filePath)} `);
+  };
+
+  ipcMain.handle('clipboard:saveImageToTemp', async (_, cliType: unknown) => {
+    const validatedCLIType = cliType === undefined ? undefined : assertCLIType(cliType);
     const image = clipboard.readImage();
     if (image.isEmpty()) {
       return null;
@@ -233,12 +268,17 @@ function setupIPCHandlers(): void {
       return null;
     }
 
-    const tempDir = path.join(app.getPath('temp'), 'cli-manager-pasted-images');
-    await fs.promises.mkdir(tempDir, { recursive: true });
+    return savePngToPastedImages(png, validatedCLIType);
+  });
 
-    const filePath = path.join(tempDir, `clipboard-${Date.now()}-${crypto.randomUUID()}.png`);
-    await fs.promises.writeFile(filePath, png);
-    return filePath;
+  ipcMain.handle('clipboard:saveImageDataToTemp', async (_, cliType: unknown, imageData: unknown) => {
+    const validatedCLIType = cliType === undefined ? undefined : assertCLIType(cliType);
+    const png = imageDataToPng(imageData);
+    if (!png) {
+      return null;
+    }
+
+    return savePngToPastedImages(png, validatedCLIType);
   });
 
   // Terminal handlers
@@ -269,6 +309,37 @@ function setupIPCHandlers(): void {
 
   ipcMain.on('terminal:write', (_, sessionId: unknown, data: unknown) => {
     terminalService.write(assertNonEmptyString(sessionId, 'sessionId'), assertString(data, 'data'));
+  });
+
+  ipcMain.handle('terminal:pasteClipboardImage', async (_, sessionId: unknown, cliType: unknown) => {
+    const validatedSessionId = assertNonEmptyString(sessionId, 'sessionId');
+    const validatedCLIType = assertCLIType(cliType);
+    const image = clipboard.readImage();
+    if (image.isEmpty()) {
+      return null;
+    }
+
+    const png = image.toPNG();
+    if (png.length === 0) {
+      return null;
+    }
+
+    const filePath = await savePngToPastedImages(png, validatedCLIType);
+    pasteImageFileToTerminal(validatedSessionId, validatedCLIType, filePath);
+    return filePath;
+  });
+
+  ipcMain.handle('terminal:pasteImageData', async (_, sessionId: unknown, cliType: unknown, imageData: unknown) => {
+    const validatedSessionId = assertNonEmptyString(sessionId, 'sessionId');
+    const validatedCLIType = assertCLIType(cliType);
+    const png = imageDataToPng(imageData);
+    if (!png) {
+      return null;
+    }
+
+    const filePath = await savePngToPastedImages(png, validatedCLIType);
+    pasteImageFileToTerminal(validatedSessionId, validatedCLIType, filePath);
+    return filePath;
   });
 
   ipcMain.on('terminal:resize', (_, sessionId: unknown, cols: unknown, rows: unknown) => {

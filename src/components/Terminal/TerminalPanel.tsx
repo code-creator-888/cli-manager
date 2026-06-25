@@ -6,6 +6,7 @@ import {
   getTerminalSessionLimitMessage,
   MAX_TERMINAL_SESSIONS_PER_CLI,
 } from '../../utils/sessionLimits';
+import { formatFilePathForCLI } from '../../../shared/clipboard';
 import type { CLIType } from '../../types';
 
 export const TerminalPanel: React.FC = () => {
@@ -160,7 +161,7 @@ export const TerminalPanel: React.FC = () => {
       }
 
       // Write paths to terminal, separated by spaces
-      const pathsString = paths.map(p => `"${p}"`).join(' ');
+      const pathsString = paths.map(p => formatFilePathForCLI(currentSession.cliType, p)).join(' ');
       window.cliManagerAPI?.terminal.write(currentSession.id, pathsString);
     }
   }, [currentSession]);
@@ -278,6 +279,7 @@ export const TerminalPanel: React.FC = () => {
           >
             <TerminalView
               sessionId={session.id}
+              cliType={session.cliType}
               isActive={currentSession?.id === session.id}
               onData={(data) => handleTerminalData(session.id, data)}
               onResize={(cols, rows) => handleResize(session.id, cols, rows)}

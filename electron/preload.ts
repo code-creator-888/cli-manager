@@ -12,7 +12,9 @@ const api: CLIManagerAPI = {
     readText: () => clipboard.readText(),
     writeText: (text: string) => clipboard.writeText(text),
     hasImage: () => !clipboard.readImage().isEmpty(),
-    saveImageToTemp: () => ipcRenderer.invoke('clipboard:saveImageToTemp'),
+    saveImageToTemp: (cliType?: CLIType) => ipcRenderer.invoke('clipboard:saveImageToTemp', cliType),
+    saveImageDataToTemp: (cliType: CLIType, imageData: ArrayBuffer) =>
+      ipcRenderer.invoke('clipboard:saveImageDataToTemp', cliType, imageData),
   },
 
   // Terminal operations
@@ -25,6 +27,12 @@ const api: CLIManagerAPI = {
 
     write: (sessionId: string, data: string) =>
       ipcRenderer.send('terminal:write', sessionId, data),
+
+    pasteClipboardImage: (sessionId: string, cliType: CLIType) =>
+      ipcRenderer.invoke('terminal:pasteClipboardImage', sessionId, cliType),
+
+    pasteImageData: (sessionId: string, cliType: CLIType, imageData: ArrayBuffer) =>
+      ipcRenderer.invoke('terminal:pasteImageData', sessionId, cliType, imageData),
 
     resize: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.send('terminal:resize', sessionId, cols, rows),

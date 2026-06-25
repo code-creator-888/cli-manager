@@ -95,7 +95,8 @@ export interface ClipboardAPI {
   readText: () => string;
   writeText: (text: string) => void;
   hasImage: () => boolean;
-  saveImageToTemp: () => Promise<string | null>;
+  saveImageToTemp: (cliType?: CLIType) => Promise<string | null>;
+  saveImageDataToTemp: (cliType: CLIType, imageData: ArrayBuffer) => Promise<string | null>;
 }
 
 export interface TerminalCreateResult {
@@ -107,6 +108,8 @@ export interface TerminalAPI {
   create: (cliType: CLIType) => Promise<TerminalCreateResult>;
   createResume: (cliType: CLIType, cliSessionId: string) => Promise<TerminalCreateResult>;
   write: (sessionId: string, data: string) => void;
+  pasteClipboardImage: (sessionId: string, cliType: CLIType) => Promise<string | null>;
+  pasteImageData: (sessionId: string, cliType: CLIType, imageData: ArrayBuffer) => Promise<string | null>;
   resize: (sessionId: string, cols: number, rows: number) => void;
   destroy: (sessionId: string) => void;
   onData: (callback: (sessionId: string, data: string) => void) => () => void;
