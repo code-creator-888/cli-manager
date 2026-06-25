@@ -129,22 +129,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
 
-    const pasteClipboard = () => {
-      const text = window.cliManagerAPI?.clipboard.readText();
+    const applyPastedText = (text: string | undefined) => {
       if (text) {
-        onDataRef.current?.(text);
+        // Use xterm built-in paste path so bracketed paste mode is respected.
+        xterm.paste(text);
       }
+    };
+
+    const pasteClipboard = () => {
+      applyPastedText(window.cliManagerAPI?.clipboard.readText());
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const shortcutKey = event.metaKey || (event.ctrlKey && !event.altKey);
-      if (!shortcutKey) return;
-
       const key = event.key.toLowerCase();
-      if (key === 'c' && xterm.hasSelection()) {
+      if (shortcutKey && key === 'c' && xterm.hasSelection()) {
         event.preventDefault();
         copySelection();
-      } else if (key === 'v') {
+        return;
+      }
+
+      // Support common terminal paste shortcut on Linux/Windows.
+      if (event.shiftKey && key === 'insert') {
         event.preventDefault();
         pasteClipboard();
       }
@@ -159,11 +165,21 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
 
+    const handlePaste = (event: ClipboardEvent) => {
+      const text = event.clipboardData?.getData('text');
+      if (!text) {
+        return;
+      }
+      event.preventDefault();
+      applyPastedText(text);
+    };
+
     xterm.attachCustomKeyEventHandler((event) => {
       handleKeyDown(event);
       return !event.defaultPrevented;
     });
     containerRef.current.addEventListener('contextmenu', handleContextMenu);
+    containerRef.current.addEventListener('paste', handlePaste);
 
     // Handle window resize
     const handleWindowResize = () => {
@@ -176,6 +192,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       console.log('Cleaning up terminal for session:', sessionId);
       window.removeEventListener('resize', handleWindowResize);
       containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
+      containerRef.current?.removeEventListener('paste', handlePaste);
       dataDisposable.dispose();
       xterm.dispose();
       if (flushFrameRef.current !== null) {
