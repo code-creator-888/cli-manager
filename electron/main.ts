@@ -276,7 +276,13 @@ function setupIPCHandlers(): void {
   };
 
   const pasteImageFileToTerminal = (sessionId: string, cliType: CLIType, filePath: string) => {
-    terminalService.write(sessionId, `${formatFilePathForCLI(cliType, filePath)} `);
+    const formatted = formatFilePathForCLI(cliType, filePath);
+    // Claude Code detects pasted image paths and renders them as inline
+    // attachments when they arrive via bracketed paste mode.
+    const content = cliType === 'claude'
+      ? `\x1b[200~${formatted}\x1b[201~`
+      : formatted;
+    terminalService.write(sessionId, `${content} `);
   };
 
   ipcMain.handle('clipboard:saveImageToTemp', async (_, cliType: unknown) => {
