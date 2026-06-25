@@ -4,6 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { subscribeTerminalData } from '../../utils/terminalDataBus';
 import type { CLIType } from '../../types';
+import { getCopyableSelectionText } from '../../../shared/clipboard';
 import 'xterm/css/xterm.css';
 
 const TERMINAL_SCROLLBACK_LINES = 5000;
@@ -127,12 +128,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       onDataRef.current?.(data);
     });
 
-    const copySelection = () => {
-      const selection = xterm.getSelection();
+    const copySelection = (): boolean => {
+      const selection = getCopyableSelectionText(
+        xterm.getSelection(),
+        window.getSelection()?.toString()
+      );
       if (selection) {
         window.cliManagerAPI?.clipboard.writeText(selection);
         xterm.clearSelection();
+        return true;
       }
+      return false;
     };
 
     const pasteClipboardImage = async (): Promise<boolean> => {
@@ -203,12 +209,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isActiveRef.current) return;
+      if (event.defaultPrevented) return;
 
       const shortcutKey = event.metaKey || (event.ctrlKey && !event.altKey);
       const key = event.key.toLowerCase();
-      if (shortcutKey && key === 'c' && xterm.hasSelection()) {
+      if (shortcutKey && key === 'c' && copySelection()) {
         event.preventDefault();
-        copySelection();
         return;
       }
 
@@ -226,6 +232,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         event.preventDefault();
         pasteClipboard();
       }
+    };
+
+    const handleCopy = (event: ClipboardEvent) => {
+      if (!isActiveRef.current) return;
+
+      const selection = getCopyableSelectionText(
+        xterm.getSelection(),
+        window.getSelection()?.toString()
+      );
+      if (!selection) return;
+
+      event.preventDefault();
+      window.cliManagerAPI?.clipboard.writeText(selection);
+      xterm.clearSelection();
     };
 
     const handleContextMenu = (event: MouseEvent) => {
@@ -276,6 +296,45 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     };
 
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (!isActiveRef.current) return;
+      if (event.defaultPrevented) return;
+
+      const shortcutKey = event.metaKey || (event.ctrlKey && !event.altKey);
+      const key = event.key.toLowerCase();
+      if (shortcutKey && key === 'c' && copySelection()) {
+        event.preventDefault();
+        return;
+      }
+
+      if (shortcutKey && key === 'v') {
+        const hasImage = window.cliManagerAPI?.clipboard.hasImage() ?? false;
+        if (hasImage) {
+          event.preventDefault();
+          void pasteClipboardImage();
+        }
+      }
+    };
+
+    const handleGlobalPaste = (event: ClipboardEvent) => {
+      if (!isActiveRef.current) return;
+
+      const imageFile = getPastedImageFile(event);
+      if (imageFile) {
+        event.preventDefault();
+        void imageFile.arrayBuffer()
+          .then((imageData) => pasteImageData(imageData))
+          .catch(() => pasteClipboardImage());
+        return;
+      }
+
+      const hasImage = window.cliManagerAPI?.clipboard.hasImage() ?? false;
+      if (hasImage) {
+        event.preventDefault();
+        void pasteClipboardImage();
+      }
+    };
+
     xterm.attachCustomKeyEventHandler((event) => {
       handleKeyDown(event);
       return !event.defaultPrevented;
@@ -283,8 +342,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     containerRef.current.addEventListener('contextmenu', handleContextMenu);
     containerRef.current.addEventListener('paste', handlePaste);
     containerRef.current.addEventListener('keydown', handleKeyDown, true);
-    window.addEventListener('paste', handlePaste, true);
-    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('copy', handleCopy, true);
+    window.addEventListener('paste', handleGlobalPaste, true);
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
 
     // Handle window resize
     const handleWindowResize = () => {
@@ -299,8 +359,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
       containerRef.current?.removeEventListener('paste', handlePaste);
       containerRef.current?.removeEventListener('keydown', handleKeyDown, true);
-      window.removeEventListener('paste', handlePaste, true);
-      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('copy', handleCopy, true);
+      window.removeEventListener('paste', handleGlobalPaste, true);
+      window.removeEventListener('keydown', handleGlobalKeyDown, true);
       dataDisposable.dispose();
       xterm.dispose();
       if (flushFrameRef.current !== null) {

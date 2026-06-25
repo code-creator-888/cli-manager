@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatFilePathForCLI,
+  getCopyableSelectionText,
   getPastedImageDirectory,
   quoteTerminalPath,
 } from './clipboard';
@@ -36,5 +37,18 @@ describe('clipboard helpers', () => {
     expect(formatFilePathForCLI('claude', '/tmp/screen "one".png'))
       .toBe('"/tmp/screen \\"one\\".png"');
     expect(quoteTerminalPath('/tmp/screen.png')).toBe('"/tmp/screen.png"');
+  });
+
+  it('copies xterm selection before browser page selection', () => {
+    expect(getCopyableSelectionText('terminal text', 'page text')).toBe('terminal text');
+  });
+
+  it('falls back to browser page selection for copy events', () => {
+    expect(getCopyableSelectionText('', 'page text')).toBe('page text');
+  });
+
+  it('does not handle copy without a selection', () => {
+    expect(getCopyableSelectionText('', '')).toBe('');
+    expect(getCopyableSelectionText(undefined, undefined)).toBe('');
   });
 });

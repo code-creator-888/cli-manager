@@ -24,6 +24,13 @@ export function formatFilePathForCLI(cliType: CLIType, filePath: string): string
   return cliType === 'qoder' ? `@${filePath}` : quoteTerminalPath(filePath);
 }
 
+export function getCopyableSelectionText(
+  terminalSelection: string | undefined,
+  pageSelection: string | undefined
+): string {
+  return terminalSelection || pageSelection || '';
+}
+
 function joinPath(basePath: string, ...segments: string[]): string {
   const separator = basePath.includes('\\') ? '\\' : '/';
   const trimmedBase = basePath.replace(/[\\/]+$/, '');
