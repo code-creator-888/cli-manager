@@ -1,5 +1,7 @@
 import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage } from 'electron';
+import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { TerminalService } from './services/terminal';
@@ -11,6 +13,7 @@ import { ConfigService } from './services/config';
 import { ConversationService, ConversationMessage, ConversationFilter } from './services/conversation';
 import type { CLIType } from '../shared/ipc';
 import { formatFilePathForCLI, getPastedImageDirectory } from '../shared/clipboard';
+import { assertTrustedIpcSender, configureWebContentsSecurity } from './security';
 import {
   assertCLIType,
   assertConversationFilter,
@@ -36,6 +39,39 @@ const devServerPort = process.env.CLI_MANAGER_DEV_PORT || '5173';
 const devServerUrl = `http://localhost:${devServerPort}`;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const isSmokeTest = process.env.CLI_MANAGER_SMOKE_TEST === '1' || process.argv.includes('--cli-manager-smoke-test');
+
+function getRendererUrl(): string {
+  if (isDev) {
+    return devServerUrl;
+  }
+
+  return pathToFileURL(path.join(__dirname, '../../dist/index.html')).toString();
+}
+
+function getTrustedWebContents(): WebContents | null {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return null;
+  }
+
+  return mainWindow.webContents;
+}
+
+function handleTrusted(
+  channel: string,
+  handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown
+): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertTrustedIpcSender(event, getTrustedWebContents());
+    return handler(event, ...args);
+  });
+}
+
+function onTrusted(channel: string, handler: (event: IpcMainEvent, ...args: unknown[]) => void): void {
+  ipcMain.on(channel, (event, ...args) => {
+    assertTrustedIpcSender(event, getTrustedWebContents());
+    handler(event, ...args);
+  });
+}
 
 function getWindowIcon(): string | undefined {
   const iconPath = path.join(__dirname, '../../assets/icon.png');
@@ -120,13 +156,15 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
     icon: getWindowIcon(),
   });
 
-  const loadPromise = isDev
-    ? mainWindow.loadURL(devServerUrl)
-    : mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+  const rendererUrl = getRendererUrl();
+  configureWebContentsSecurity(mainWindow.webContents, rendererUrl);
+  const loadPromise = mainWindow.loadURL(rendererUrl);
 
   if (isSmokeTest) {
     const smokeTimeout = setTimeout(() => {
@@ -159,13 +197,6 @@ function createWindow(): void {
     }
   });
 
-  // Prevent opening files dropped into the window
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    // Only prevent file:// URLs (dragged files)
-    if (url.startsWith('file://')) {
-      event.preventDefault();
-    }
-  });
 }
 
 function setupAppMenu(): void {
@@ -221,7 +252,7 @@ async function initializeServices(): Promise<void> {
 
 // Set up IPC handlers
 function setupIPCHandlers(): void {
-  ipcMain.on('app:quit', () => quitApp());
+  onTrusted('app:quit', () => quitApp());
 
   const savePngToPastedImages = async (png: Buffer, cliType: CLIType | undefined) => {
     const tempDir = getPastedImageDirectory(cliType, {
@@ -285,7 +316,7 @@ function setupIPCHandlers(): void {
     terminalService.write(sessionId, `${content} `);
   };
 
-  ipcMain.handle('clipboard:saveImageToTemp', async (_, cliType: unknown) => {
+  handleTrusted('clipboard:saveImageToTemp', async (_, cliType: unknown) => {
     const validatedCLIType = cliType === undefined ? undefined : assertCLIType(cliType);
     const image = clipboard.readImage();
     if (image.isEmpty()) {
@@ -300,7 +331,7 @@ function setupIPCHandlers(): void {
     return savePngToPastedImages(png, validatedCLIType);
   });
 
-  ipcMain.handle('clipboard:saveImageDataToTemp', async (_, cliType: unknown, imageData: unknown) => {
+  handleTrusted('clipboard:saveImageDataToTemp', async (_, cliType: unknown, imageData: unknown) => {
     const validatedCLIType = cliType === undefined ? undefined : assertCLIType(cliType);
     const png = imageDataToPng(imageData);
     if (!png) {
@@ -311,7 +342,7 @@ function setupIPCHandlers(): void {
   });
 
   // Terminal handlers
-  ipcMain.handle('terminal:create', async (_, cliType: unknown) => {
+  handleTrusted('terminal:create', async (_, cliType: unknown) => {
     const validatedCLIType = assertCLIType(cliType);
     const command = getCommandForCLI(validatedCLIType);
     const cliSessionId = supportsPresetCLISession(validatedCLIType) ? crypto.randomUUID() : undefined;
@@ -320,7 +351,7 @@ function setupIPCHandlers(): void {
     return { sessionId, cliSessionId };
   });
 
-  ipcMain.handle('terminal:createResume', async (_, cliType: unknown, cliSessionId: unknown) => {
+  handleTrusted('terminal:createResume', async (_, cliType: unknown, cliSessionId: unknown) => {
     const validatedCLIType = assertCLIType(cliType);
     const validatedSessionId = assertNonEmptyString(cliSessionId, 'cliSessionId');
     if (!supportsResumeCLISession(validatedCLIType)) {
@@ -336,11 +367,11 @@ function setupIPCHandlers(): void {
     return { sessionId, cliSessionId: validatedSessionId };
   });
 
-  ipcMain.on('terminal:write', (_, sessionId: unknown, data: unknown) => {
+  onTrusted('terminal:write', (_, sessionId: unknown, data: unknown) => {
     terminalService.write(assertNonEmptyString(sessionId, 'sessionId'), assertString(data, 'data'));
   });
 
-  ipcMain.handle('terminal:pasteClipboardImage', async (_, sessionId: unknown, cliType: unknown) => {
+  handleTrusted('terminal:pasteClipboardImage', async (_, sessionId: unknown, cliType: unknown) => {
     const validatedSessionId = assertNonEmptyString(sessionId, 'sessionId');
     const validatedCLIType = assertCLIType(cliType);
     const image = clipboard.readImage();
@@ -358,7 +389,7 @@ function setupIPCHandlers(): void {
     return filePath;
   });
 
-  ipcMain.handle('terminal:pasteImageData', async (_, sessionId: unknown, cliType: unknown, imageData: unknown) => {
+  handleTrusted('terminal:pasteImageData', async (_, sessionId: unknown, cliType: unknown, imageData: unknown) => {
     const validatedSessionId = assertNonEmptyString(sessionId, 'sessionId');
     const validatedCLIType = assertCLIType(cliType);
     const png = imageDataToPng(imageData);
@@ -371,12 +402,12 @@ function setupIPCHandlers(): void {
     return filePath;
   });
 
-  ipcMain.on('terminal:resize', (_, sessionId: unknown, cols: unknown, rows: unknown) => {
+  onTrusted('terminal:resize', (_, sessionId: unknown, cols: unknown, rows: unknown) => {
     const size = assertTerminalSize(cols, rows);
     terminalService.resize(assertNonEmptyString(sessionId, 'sessionId'), size.cols, size.rows);
   });
 
-  ipcMain.on('terminal:destroy', (_, sessionId: unknown) => {
+  onTrusted('terminal:destroy', (_, sessionId: unknown) => {
     terminalService.destroy(assertNonEmptyString(sessionId, 'sessionId'));
   });
 
@@ -390,7 +421,7 @@ function setupIPCHandlers(): void {
   });
 
   // Status handlers
-  ipcMain.handle('status:get', async (_, cliType: unknown) => {
+  handleTrusted('status:get', async (_, cliType: unknown) => {
     const validatedCLIType = assertCLIType(cliType);
     if (validatedCLIType === 'claude') return claudeService.getStatus();
     if (validatedCLIType === 'codex') return codexService.getStatus();
@@ -398,7 +429,7 @@ function setupIPCHandlers(): void {
     return copilotService.getStatus();
   });
 
-  ipcMain.handle('status:checkAll', async () => {
+  handleTrusted('status:checkAll', async () => {
     // 并行检查所有 CLI 状态，提高速度
     const [claudeStatus, copilotStatus, codexStatus, qoderStatus] = await Promise.all([
       claudeService.checkStatus(),
@@ -410,15 +441,15 @@ function setupIPCHandlers(): void {
   });
 
   // Config handlers
-  ipcMain.handle('config:get', async (_, cliType: unknown) => {
+  handleTrusted('config:get', async (_, cliType: unknown) => {
     return configService.get(assertCLIType(cliType));
   });
 
-  ipcMain.handle('config:set', async (_, cliType: unknown, config: unknown) => {
+  handleTrusted('config:set', async (_, cliType: unknown, config: unknown) => {
     await configService.set(assertCLIType(cliType), assertPlainObject(config, 'config'));
   });
 
-  ipcMain.handle('config:setEnvVar', async (_, cliType: unknown, key: unknown, value: unknown) => {
+  handleTrusted('config:setEnvVar', async (_, cliType: unknown, key: unknown, value: unknown) => {
     await configService.setEnvVar(
       assertCLIType(cliType),
       assertNonEmptyString(key, 'key'),
@@ -426,48 +457,48 @@ function setupIPCHandlers(): void {
     );
   });
 
-  ipcMain.handle('config:deleteEnvVar', async (_, cliType: unknown, key: unknown) => {
+  handleTrusted('config:deleteEnvVar', async (_, cliType: unknown, key: unknown) => {
     await configService.deleteEnvVar(assertCLIType(cliType), assertNonEmptyString(key, 'key'));
   });
 
   // Settings.json handler for Claude
-  ipcMain.handle('config:getSettings', async () => {
+  handleTrusted('config:getSettings', async () => {
     return configService.getSettings();
   });
 
-  ipcMain.handle('config:setSettings', async (_, settings: unknown) => {
+  handleTrusted('config:setSettings', async (_, settings: unknown) => {
     await configService.setSettings(assertPlainObject(settings, 'settings'));
   });
 
   // Apps.json handler for Copilot
-  ipcMain.handle('config:getApps', async () => {
+  handleTrusted('config:getApps', async () => {
     return configService.getApps();
   });
 
-  ipcMain.handle('config:setApps', async (_, apps: unknown) => {
+  handleTrusted('config:setApps', async (_, apps: unknown) => {
     await configService.setApps(assertPlainObject(apps, 'apps'));
   });
 
   // Config.json handler for Codex
-  ipcMain.handle('config:getCodexConfig', async () => {
+  handleTrusted('config:getCodexConfig', async () => {
     return configService.getCodexConfig();
   });
 
-  ipcMain.handle('config:setCodexConfig', async (_, content: unknown) => {
+  handleTrusted('config:setCodexConfig', async (_, content: unknown) => {
     await configService.setCodexConfig(assertString(content, 'content'));
   });
 
   // Settings.json handler for Qoder
-  ipcMain.handle('config:getQoderSettings', async () => {
+  handleTrusted('config:getQoderSettings', async () => {
     return configService.getQoderSettings();
   });
 
-  ipcMain.handle('config:setQoderSettings', async (_, settings: unknown) => {
+  handleTrusted('config:setQoderSettings', async (_, settings: unknown) => {
     await configService.setQoderSettings(assertPlainObject(settings, 'settings'));
   });
 
   // Conversation handlers
-  ipcMain.handle('conversation:create', async (_, cliType: unknown, sessionId: unknown, title?: unknown) => {
+  handleTrusted('conversation:create', async (_, cliType: unknown, sessionId: unknown, title?: unknown) => {
     return conversationService.create(
       assertCLIType(cliType),
       assertNonEmptyString(sessionId, 'sessionId'),
@@ -475,50 +506,50 @@ function setupIPCHandlers(): void {
     );
   });
 
-  ipcMain.handle('conversation:get', async (_, id: unknown) => {
+  handleTrusted('conversation:get', async (_, id: unknown) => {
     return conversationService.get(assertNonEmptyString(id, 'id'));
   });
 
-  ipcMain.handle('conversation:getWithMessages', async (_, id: unknown) => {
+  handleTrusted('conversation:getWithMessages', async (_, id: unknown) => {
     return conversationService.getWithMessages(assertNonEmptyString(id, 'id'));
   });
 
-  ipcMain.handle('conversation:list', async (_, filter?: unknown) => {
+  handleTrusted('conversation:list', async (_, filter?: unknown) => {
     return conversationService.list(assertConversationFilter(filter) as ConversationFilter | undefined);
   });
 
-  ipcMain.handle('conversation:addMessage', async (_, conversationId: unknown, message: unknown) => {
+  handleTrusted('conversation:addMessage', async (_, conversationId: unknown, message: unknown) => {
     return conversationService.addMessage(
       assertNonEmptyString(conversationId, 'conversationId'),
       assertConversationMessage(message) as Omit<ConversationMessage, 'id' | 'conversationId' | 'timestamp'>
     );
   });
 
-  ipcMain.handle('conversation:updateTitle', async (_, id: unknown, title: unknown) => {
+  handleTrusted('conversation:updateTitle', async (_, id: unknown, title: unknown) => {
     await conversationService.updateTitle(assertNonEmptyString(id, 'id'), assertNonEmptyString(title, 'title'));
   });
 
-  ipcMain.handle('conversation:delete', async (_, id: unknown) => {
+  handleTrusted('conversation:delete', async (_, id: unknown) => {
     await conversationService.delete(assertNonEmptyString(id, 'id'));
   });
 
-  ipcMain.handle('conversation:deleteByCLI', async (_, cliType: unknown) => {
+  handleTrusted('conversation:deleteByCLI', async (_, cliType: unknown) => {
     return conversationService.deleteByCLI(assertCLIType(cliType));
   });
 
-  ipcMain.handle('conversation:toggleFavorite', async (_, id: unknown) => {
+  handleTrusted('conversation:toggleFavorite', async (_, id: unknown) => {
     await conversationService.toggleFavorite(assertNonEmptyString(id, 'id'));
   });
 
-  ipcMain.handle('conversation:getMessages', async (_, conversationId: unknown) => {
+  handleTrusted('conversation:getMessages', async (_, conversationId: unknown) => {
     return conversationService.getMessages(assertNonEmptyString(conversationId, 'conversationId'));
   });
 
-  ipcMain.handle('conversation:getActiveForSession', async (_, sessionId: unknown) => {
+  handleTrusted('conversation:getActiveForSession', async (_, sessionId: unknown) => {
     return conversationService.getActiveConversationForSession(assertNonEmptyString(sessionId, 'sessionId'));
   });
 
-  ipcMain.handle('conversation:getStats', async () => {
+  handleTrusted('conversation:getStats', async () => {
     return conversationService.getStats();
   });
 
