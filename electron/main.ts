@@ -60,9 +60,14 @@ function handleTrusted(
   channel: string,
   handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown
 ): void {
-  ipcMain.handle(channel, (event, ...args) => {
+  ipcMain.handle(channel, async (event, ...args) => {
     assertTrustedIpcSender(event, getTrustedWebContents());
-    return handler(event, ...args);
+    try {
+      return await handler(event, ...args);
+    } catch (error) {
+      console.error(`IPC handler failed for "${channel}": ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+      throw error;
+    }
   });
 }
 
