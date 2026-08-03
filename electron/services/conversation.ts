@@ -35,6 +35,31 @@ export interface ConversationMessage {
   };
 }
 
+interface ConversationRow {
+  id: string;
+  cli_type: CLIType;
+  session_id: string;
+  cli_session_id: string | null;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  favorite: number;
+}
+
+interface ConversationMessageRow {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  timestamp: string;
+  metadata: string | null;
+}
+
+interface CountRow {
+  count: number;
+}
+
 export interface ConversationFilter {
   cliType?: CLIType;
   sessionId?: string;
@@ -234,7 +259,7 @@ export class ConversationService {
 
   async get(id: string): Promise<Conversation | null> {
     const stmt = this.db!.prepare('SELECT * FROM conversations WHERE id = ?');
-    const row = stmt.get(id) as any;
+    const row = stmt.get(id) as ConversationRow | undefined;
 
     return row ? this.rowToConversation(row) : null;
   }
@@ -244,7 +269,7 @@ export class ConversationService {
     if (!conversation) return null;
 
     const stmt = this.db!.prepare('SELECT * FROM conversation_messages WHERE conversation_id = ? ORDER BY timestamp ASC');
-    const rows = stmt.all(id) as any[];
+    const rows = stmt.all(id) as ConversationMessageRow[];
 
     return {
       ...conversation,
@@ -302,7 +327,7 @@ export class ConversationService {
     }
 
     const stmt = this.db!.prepare(sql);
-    const rows = stmt.all(...params) as any[];
+    const rows = stmt.all(...params) as ConversationRow[];
 
     return rows.map(this.rowToConversation);
   }
@@ -339,7 +364,7 @@ export class ConversationService {
 
   async getMessages(conversationId: string): Promise<ConversationMessage[]> {
     const stmt = this.db!.prepare('SELECT * FROM conversation_messages WHERE conversation_id = ? ORDER BY timestamp ASC');
-    const rows = stmt.all(conversationId) as any[];
+    const rows = stmt.all(conversationId) as ConversationMessageRow[];
 
     return rows.map(this.rowToMessage);
   }
@@ -351,7 +376,7 @@ export class ConversationService {
       ORDER BY updated_at DESC
       LIMIT 1
     `);
-    const row = stmt.get(sessionId) as any;
+    const row = stmt.get(sessionId) as ConversationRow | undefined;
 
     return row ? this.rowToConversation(row) : null;
   }
@@ -364,12 +389,12 @@ export class ConversationService {
     qoder: number;
     favorites: number;
   }> {
-    const total = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations').get() as any).count;
-    const claude = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('claude') as any).count;
-    const copilot = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('copilot') as any).count;
-    const codex = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('codex') as any).count;
-    const qoder = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('qoder') as any).count;
-    const favorites = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE favorite = 1').get() as any).count;
+    const total = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations').get() as CountRow).count;
+    const claude = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('claude') as CountRow).count;
+    const copilot = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('copilot') as CountRow).count;
+    const codex = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('codex') as CountRow).count;
+    const qoder = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE cli_type = ?').get('qoder') as CountRow).count;
+    const favorites = (this.db!.prepare('SELECT COUNT(*) as count FROM conversations WHERE favorite = 1').get() as CountRow).count;
 
     return { total, claude, copilot, codex, qoder, favorites };
   }
@@ -396,7 +421,7 @@ export class ConversationService {
     `);
   }
 
-  private rowToConversation(row: any): Conversation {
+  private rowToConversation(row: ConversationRow): Conversation {
     return {
       id: row.id,
       cliType: row.cli_type,
@@ -410,7 +435,7 @@ export class ConversationService {
     };
   }
 
-  private rowToMessage(row: any): ConversationMessage {
+  private rowToMessage(row: ConversationMessageRow): ConversationMessage {
     return {
       id: row.id,
       conversationId: row.conversation_id,
