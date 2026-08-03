@@ -1,9 +1,83 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../../stores';
 import { canCreateTerminalSession, getTerminalSessionLimitMessage } from '../../utils/sessionLimits';
-import type { CLIType, ConversationStats } from '../../types';
+import type { CLIType, CLIStatus, ConversationStats } from '../../types';
 import { getCLILabel, getCLIPrimaryColor } from '../../utils/cliUtils';
 import { StatusDot } from '../shared/StatusDot';
+
+const StatusCard: React.FC<{
+  title: string;
+  status: CLIStatus | null;
+  color: string;
+  isLoading?: boolean;
+}> = ({ title, status, color, isLoading }) => (
+  <div className="bg-bg-secondary rounded-lg p-4 border border-bg-tertiary">
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="text-lg font-medium text-text-primary">{title}</h3>
+      <StatusDot status={status} size="md" />
+    </div>
+    {status ? (
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-text-secondary">Status</span>
+          <span className="text-text-primary">
+            {!status.installed
+              ? 'Not Installed'
+              : status.running
+              ? 'Running'
+              : 'Stopped'}
+          </span>
+        </div>
+        {status.version && (
+          <div className="flex justify-between">
+            <span className="text-text-secondary">Version</span>
+            <span className="text-text-primary">{status.version}</span>
+          </div>
+        )}
+        {status.pid && (
+          <div className="flex justify-between">
+            <span className="text-text-secondary">PID</span>
+            <span className="text-text-primary">{status.pid}</span>
+          </div>
+        )}
+        {status.cpuUsage !== undefined && (
+          <div className="flex justify-between">
+            <span className="text-text-secondary">CPU</span>
+            <span className="text-text-primary">{status.cpuUsage.toFixed(1)}%</span>
+          </div>
+        )}
+        {status.memoryUsage !== undefined && (
+          <div className="flex justify-between">
+            <span className="text-text-secondary">Memory</span>
+            <span className="text-text-primary">{status.memoryUsage.toFixed(1)}%</span>
+          </div>
+        )}
+      </div>
+    ) : (
+      <div className="text-text-secondary text-sm">
+        {isLoading ? 'Checking status...' : 'No status available'}
+      </div>
+    )}
+    <div className={`mt-4 h-1 rounded ${color}`} />
+  </div>
+);
+
+const StatCard: React.FC<{
+  title: string;
+  value: number;
+  icon: string;
+  isLoading?: boolean;
+}> = ({ title, value, icon, isLoading }) => (
+  <div className="bg-bg-secondary rounded-lg p-4 border border-bg-tertiary">
+    <div className="flex items-center gap-3">
+      <div className="text-2xl">{icon}</div>
+      <div>
+        <div className="text-2xl font-bold text-text-primary">{isLoading ? '…' : value}</div>
+        <div className="text-text-secondary text-sm">{title}</div>
+      </div>
+    </div>
+  </div>
+);
 
 export const Dashboard: React.FC = () => {
   const { statuses, updateStatus, addSession, setActiveCLI, setActiveSession, setActiveView, sessions, addNotification } = useAppStore();
@@ -11,6 +85,7 @@ export const Dashboard: React.FC = () => {
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(true);
   const [isStatusLoading, setIsStatusLoading] = useState(true);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -61,12 +136,22 @@ export const Dashboard: React.FC = () => {
       fetchStats();
     });
     const unsubscribeMessage = window.cliManagerAPI.conversation.onMessage(() => {
-      fetchStats();
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        fetchStats();
+      }, 2000);
     });
 
     return () => {
       unsubscribeCreated();
       unsubscribeMessage();
+      if (debounceTimerRef.current !== null) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
     };
   }, [fetchStats]);
 
@@ -123,76 +208,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const StatusCard: React.FC<{ title: string; status: typeof statuses.claude; color: string }> = ({
-    title,
-    status,
-    color,
-  }) => (
-    <div className="bg-bg-secondary rounded-lg p-4 border border-bg-tertiary">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-medium text-text-primary">{title}</h3>
-        <StatusDot status={status} size="md" />
-      </div>
-      {status ? (
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-text-secondary">Status</span>
-            <span className="text-text-primary">
-              {!status.installed
-                ? 'Not Installed'
-                : status.running
-                ? 'Running'
-                : 'Stopped'}
-            </span>
-          </div>
-          {status.version && (
-            <div className="flex justify-between">
-              <span className="text-text-secondary">Version</span>
-              <span className="text-text-primary">{status.version}</span>
-            </div>
-          )}
-          {status.pid && (
-            <div className="flex justify-between">
-              <span className="text-text-secondary">PID</span>
-              <span className="text-text-primary">{status.pid}</span>
-            </div>
-          )}
-          {status.cpuUsage !== undefined && (
-            <div className="flex justify-between">
-              <span className="text-text-secondary">CPU</span>
-              <span className="text-text-primary">{status.cpuUsage.toFixed(1)}%</span>
-            </div>
-          )}
-          {status.memoryUsage !== undefined && (
-            <div className="flex justify-between">
-              <span className="text-text-secondary">Memory</span>
-              <span className="text-text-primary">{status.memoryUsage.toFixed(1)}%</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="text-text-secondary text-sm">{isStatusLoading ? 'Checking status...' : 'No status available'}</div>
-      )}
-      <div className={`mt-4 h-1 rounded ${color}`} />
-    </div>
-  );
-
-  const StatCard: React.FC<{ title: string; value: number; icon: string }> = ({
-    title,
-    value,
-    icon,
-  }) => (
-    <div className="bg-bg-secondary rounded-lg p-4 border border-bg-tertiary">
-      <div className="flex items-center gap-3">
-        <div className="text-2xl">{icon}</div>
-        <div>
-          <div className="text-2xl font-bold text-text-primary">{isStatsLoading ? '…' : value}</div>
-          <div className="text-text-secondary text-sm">{title}</div>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <div className="h-full overflow-y-auto custom-scrollbar p-6">
       <div className="mb-6 flex items-center justify-between">
@@ -212,33 +227,37 @@ export const Dashboard: React.FC = () => {
           title={`${getCLILabel('copilot')} CLI`}
           status={statuses.copilot}
           color={getCLIPrimaryColor('copilot')}
+          isLoading={isStatusLoading}
         />
         <StatusCard
           title={`${getCLILabel('qoder')} CLI`}
           status={statuses.qoder}
           color={getCLIPrimaryColor('qoder')}
+          isLoading={isStatusLoading}
         />
         <StatusCard
           title={`${getCLILabel('claude')} CLI`}
           status={statuses.claude}
           color={getCLIPrimaryColor('claude')}
+          isLoading={isStatusLoading}
         />
         <StatusCard
           title={`${getCLILabel('codex')} CLI`}
           status={statuses.codex}
           color={getCLIPrimaryColor('codex')}
+          isLoading={isStatusLoading}
         />
       </div>
 
       {/* Stats */}
       <h3 className="text-lg font-medium text-text-primary mb-4">History Statistics</h3>
       <div className="grid grid-cols-6 gap-4 mb-6">
-        <StatCard title="Total Conversations" value={stats.total} icon="📊" />
-        <StatCard title="Copilot Conversations" value={stats.copilot} icon="✈️" />
-        <StatCard title="Qoder Conversations" value={stats.qoder} icon="⚡" />
-        <StatCard title="Claude Conversations" value={stats.claude} icon="🤖" />
-        <StatCard title="Codex Conversations" value={stats.codex} icon="🔬" />
-        <StatCard title="Favorites" value={stats.favorites} icon="⭐" />
+        <StatCard title="Total Conversations" value={stats.total} icon="📊" isLoading={isStatsLoading} />
+        <StatCard title="Copilot Conversations" value={stats.copilot} icon="✈️" isLoading={isStatsLoading} />
+        <StatCard title="Qoder Conversations" value={stats.qoder} icon="⚡" isLoading={isStatsLoading} />
+        <StatCard title="Claude Conversations" value={stats.claude} icon="🤖" isLoading={isStatsLoading} />
+        <StatCard title="Codex Conversations" value={stats.codex} icon="🔬" isLoading={isStatsLoading} />
+        <StatCard title="Favorites" value={stats.favorites} icon="⭐" isLoading={isStatsLoading} />
       </div>
 
       {/* Quick Actions */}

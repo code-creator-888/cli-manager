@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../../stores';
 import { ConversationWithMessages } from '../../types';
 import { MessageBubble } from './MessageBubble';
@@ -254,8 +254,12 @@ export const ConversationPanel: React.FC = () => {
     }
   };
 
-  const conversationList = Object.values(conversations).sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  const conversationList = useMemo(
+    () =>
+      Object.values(conversations).sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      ),
+    [conversations]
   );
 
   return (
