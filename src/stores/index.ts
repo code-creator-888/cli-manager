@@ -28,6 +28,7 @@ interface AppState {
   setActiveConversation: (conversationId: string | null) => void;
   setConversations: (conversations: Conversation[]) => void;
   addConversation: (conversation: Conversation) => void;
+  appendConversations: (conversations: Conversation[]) => void;
   updateConversation: (conversationId: string, updates: Partial<Conversation>) => void;
   removeConversation: (conversationId: string) => void;
   removeConversationsForCLI: (cliType: CLIType) => void;
@@ -135,6 +136,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   addConversation: (conversation) =>
     set((state) => ({
       conversations: { ...state.conversations, [conversation.id]: conversation },
+    })),
+
+  appendConversations: (conversations) =>
+    set((state) => ({
+      conversations: conversations.reduce(
+        (acc, conv) => { acc[conv.id] = conv; return acc; },
+        { ...state.conversations }
+      ),
     })),
 
   updateConversation: (conversationId, updates) =>

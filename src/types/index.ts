@@ -4,8 +4,6 @@ export type {
   ActiveView,
   CLIConfig,
   CLIManagerAPI,
-  ConfigFileCandidate,
-  ConfigFileResult,
   CLIStatus,
   CLIType,
   ConfigAPI,

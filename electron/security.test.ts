@@ -88,7 +88,7 @@ describe('Electron security boundaries', () => {
     expect(mainSource).toContain('configureWebContentsSecurity');
     expect(mainSource).toContain('handleTrusted');
     expect(mainSource).toContain('onTrusted');
-    expect(trustedRegistrations).toHaveLength(36);
+    expect(trustedRegistrations).toHaveLength(28);
     expect(directRegistrations).toHaveLength(2);
   });
 });

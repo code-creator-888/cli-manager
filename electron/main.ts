@@ -461,42 +461,6 @@ function setupIPCHandlers(): void {
     await configService.deleteEnvVar(assertCLIType(cliType), assertNonEmptyString(key, 'key'));
   });
 
-  // Settings.json handler for Claude
-  handleTrusted('config:getSettings', async () => {
-    return configService.getSettings();
-  });
-
-  handleTrusted('config:setSettings', async (_, settings: unknown) => {
-    await configService.setSettings(assertPlainObject(settings, 'settings'));
-  });
-
-  // Apps.json handler for Copilot
-  handleTrusted('config:getApps', async () => {
-    return configService.getApps();
-  });
-
-  handleTrusted('config:setApps', async (_, apps: unknown) => {
-    await configService.setApps(assertPlainObject(apps, 'apps'));
-  });
-
-  // Config.json handler for Codex
-  handleTrusted('config:getCodexConfig', async () => {
-    return configService.getCodexConfig();
-  });
-
-  handleTrusted('config:setCodexConfig', async (_, content: unknown) => {
-    await configService.setCodexConfig(assertString(content, 'content'));
-  });
-
-  // Settings.json handler for Qoder
-  handleTrusted('config:getQoderSettings', async () => {
-    return configService.getQoderSettings();
-  });
-
-  handleTrusted('config:setQoderSettings', async (_, settings: unknown) => {
-    await configService.setQoderSettings(assertPlainObject(settings, 'settings'));
-  });
-
   // Conversation handlers
   handleTrusted('conversation:create', async (_, cliType: unknown, sessionId: unknown, title?: unknown) => {
     return conversationService.create(

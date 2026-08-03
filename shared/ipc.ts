@@ -121,31 +121,11 @@ export interface StatusAPI {
   checkAll: () => Promise<CLIStatus[]>;
 }
 
-export interface ConfigFileCandidate {
-  path: string;
-  exists: boolean;
-}
-
-export interface ConfigFileResult<T> {
-  path: string;
-  exists: boolean;
-  candidates: ConfigFileCandidate[];
-  content: T;
-}
-
 export interface ConfigAPI {
   get: (cliType: CLIType) => Promise<CLIConfig>;
   set: (cliType: CLIType, config: Record<string, unknown>) => Promise<void>;
   setEnvVar: (cliType: CLIType, key: string, value: string) => Promise<void>;
   deleteEnvVar: (cliType: CLIType, key: string) => Promise<void>;
-  getSettings: () => Promise<ConfigFileResult<Record<string, unknown>>>;
-  setSettings: (settings: Record<string, unknown>) => Promise<void>;
-  getApps: () => Promise<ConfigFileResult<Record<string, unknown>>>;
-  setApps: (apps: Record<string, unknown>) => Promise<void>;
-  getCodexConfig: () => Promise<ConfigFileResult<string>>;
-  setCodexConfig: (config: string) => Promise<void>;
-  getQoderSettings: () => Promise<ConfigFileResult<Record<string, unknown>>>;
-  setQoderSettings: (settings: Record<string, unknown>) => Promise<void>;
 }
 
 export interface ConversationAPI {

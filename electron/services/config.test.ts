@@ -22,47 +22,6 @@ afterEach(async () => {
 });
 
 describe('ConfigService', () => {
-  it('returns defaults only when config files are missing', async () => {
-    await expect(service.getSettings()).resolves.toMatchObject({
-      path: path.join(tempDir, 'claude', 'settings.json'),
-      exists: false,
-      content: {},
-      candidates: [
-        { path: path.join(tempDir, 'claude', 'settings.json'), exists: false },
-        { path: path.join(tempDir, 'claude', 'config.json'), exists: false },
-      ],
-    });
-
-    await expect(service.getCodexConfig()).resolves.toMatchObject({
-      path: path.join(tempDir, 'codex', 'config.toml'),
-      exists: false,
-      content: '',
-    });
-  });
-
-  it('uses the first existing candidate path when loading and saving', async () => {
-    const fallbackPath = path.join(tempDir, 'copilot', 'config.json');
-    await fs.promises.mkdir(path.dirname(fallbackPath), { recursive: true });
-    await fs.promises.writeFile(fallbackPath, '{"existing":true}', 'utf-8');
-
-    await expect(service.getApps()).resolves.toMatchObject({
-      path: fallbackPath,
-      exists: true,
-      content: { existing: true },
-    });
-
-    await service.setApps({ updated: true });
-    await expect(fs.promises.readFile(fallbackPath, 'utf-8')).resolves.toBe(JSON.stringify({ updated: true }, null, 2));
-  });
-
-  it('throws on invalid JSON instead of silently returning an empty object', async () => {
-    const settingsPath = path.join(tempDir, 'claude', 'settings.json');
-    await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
-    await fs.promises.writeFile(settingsPath, '{ invalid json', 'utf-8');
-
-    await expect(service.getSettings()).rejects.toThrow(`Invalid JSON in ${settingsPath}`);
-  });
-
   it('does not overwrite existing invalid config when merging updates', async () => {
     const configPath = path.join(tempDir, 'claude', 'config.json');
     await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
@@ -70,17 +29,6 @@ describe('ConfigService', () => {
 
     await expect(service.set('claude', { enabled: true })).rejects.toThrow(`Invalid JSON in ${configPath}`);
     await expect(fs.promises.readFile(configPath, 'utf-8')).resolves.toBe('{ invalid json');
-  });
-
-  it('writes config atomically and removes the temporary backup after success', async () => {
-    const settingsPath = path.join(tempDir, 'claude', 'settings.json');
-    await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
-    await fs.promises.writeFile(settingsPath, '{"old":true}', 'utf-8');
-
-    await service.setSettings({ updated: true });
-
-    await expect(fs.promises.readFile(settingsPath, 'utf-8')).resolves.toBe(JSON.stringify({ updated: true }, null, 2));
-    expect(fs.existsSync(`${settingsPath}.bak`)).toBe(false);
   });
 
   it('does not create env.json when deleting a missing env var file', async () => {

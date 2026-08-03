@@ -6,7 +6,7 @@ import type { CLIType } from '../../types';
 import { getCLILabel, getCLIBadgeClass } from '../../utils/cliUtils';
 
 export const ConversationPanel: React.FC = () => {
-  const { activeCLI, conversations, sessions, setActiveConversation, setConversations, removeConversation, removeConversationsForCLI, setConversationMessages, addNotification, addSession, setActiveCLI, setActiveSession, setActiveView } = useAppStore();
+  const { activeCLI, conversations, sessions, setActiveConversation, setConversations, appendConversations, removeConversation, removeConversationsForCLI, setConversationMessages, addNotification, addSession, setActiveCLI, setActiveSession, setActiveView } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -15,7 +15,13 @@ export const ConversationPanel: React.FC = () => {
   const [selectedConversation, setSelectedConversation] = useState<ConversationWithMessages | null>(null);
   const [loadingConversationId, setLoadingConversationId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitleValue, setEditingTitleValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const loadConversationsRef = useRef<() => void>(() => undefined);
   const detailsRequestRef = useRef(0);
 
@@ -73,14 +79,18 @@ export const ConversationPanel: React.FC = () => {
   const loadConversations = useCallback(async () => {
     if (!window.cliManagerAPI) return;
     setIsLoading(true);
+    setOffset(0);
+    setHasMore(false);
     try {
       const result = await window.cliManagerAPI.conversation.list({
         cliType: activeCLI,
         search: debouncedSearch || undefined,
         favorites: showFavorites || undefined,
         limit: 50,
+        offset: 0,
       });
       setConversations(result);
+      setHasMore(result.length === 50);
     } catch (e) {
       console.error('Failed to load conversations:', e);
       addNotification({
@@ -238,6 +248,51 @@ export const ConversationPanel: React.FC = () => {
       setIsClearing(false);
     }
   };
+
+  const loadMore = useCallback(async () => {
+    if (!window.cliManagerAPI || isLoadingMore || !hasMore) return;
+    const nextOffset = offset + 50;
+    setIsLoadingMore(true);
+    try {
+      const result = await window.cliManagerAPI.conversation.list({
+        cliType: activeCLI,
+        search: debouncedSearch || undefined,
+        favorites: showFavorites || undefined,
+        limit: 50,
+        offset: nextOffset,
+      });
+      appendConversations(result);
+      setOffset(nextOffset);
+      setHasMore(result.length === 50);
+    } catch (e) {
+      addNotification({
+        type: 'error',
+        message: `Failed to load more: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [activeCLI, debouncedSearch, showFavorites, offset, hasMore, isLoadingMore, appendConversations, addNotification]);
+
+  const confirmTitleEdit = async () => {
+    if (!selectedConversation || !window.cliManagerAPI) return;
+    const trimmed = editingTitleValue.trim();
+    if (!trimmed) { setIsEditingTitle(false); return; }
+    const previousTitle = selectedConversation.title;
+    setSelectedConversation(prev => prev ? { ...prev, title: trimmed } : null);
+    useAppStore.getState().updateConversation(selectedConversation.id, { title: trimmed });
+    setIsEditingTitle(false);
+    try {
+      await window.cliManagerAPI.conversation.updateTitle(selectedConversation.id, trimmed);
+    } catch (e) {
+      setSelectedConversation(prev => prev ? { ...prev, title: previousTitle } : null);
+      useAppStore.getState().updateConversation(selectedConversation.id, { title: previousTitle });
+      addNotification({ type: 'error', message: `Failed to update title: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  };
+
+  useEffect(() => { setIsEditingTitle(false); }, [selectedConversation?.id]);
+  useEffect(() => { if (isEditingTitle) titleInputRef.current?.focus(); }, [isEditingTitle]);
 
   const formatDate = (date: Date) => {
     const d = new Date(date);
@@ -428,6 +483,17 @@ export const ConversationPanel: React.FC = () => {
               ))}
             </div>
           )}
+          {hasMore && (
+            <div className="p-4 flex justify-center border-t border-bg-tertiary">
+              <button
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                className="px-4 py-2 rounded-lg bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-tertiary text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingMore ? 'Loading...' : 'Load more'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -437,9 +503,30 @@ export const ConversationPanel: React.FC = () => {
           {/* Header */}
           <div className="p-4 bg-bg-secondary border-b border-bg-tertiary">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-medium text-text-primary">
-                {selectedConversation.title || 'Untitled Conversation'}
-              </h2>
+              {isEditingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  value={editingTitleValue}
+                  onChange={(e) => setEditingTitleValue(e.target.value)}
+                  onBlur={confirmTitleEdit}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                    if (e.key === 'Escape') setIsEditingTitle(false);
+                  }}
+                  className="text-lg font-medium text-text-primary bg-bg-tertiary rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-0 flex-1"
+                />
+              ) : (
+                <h2
+                  className="text-lg font-medium text-text-primary cursor-pointer hover:text-blue-300 transition-colors"
+                  title="Click to edit title"
+                  onClick={() => {
+                    setEditingTitleValue(selectedConversation.title || '');
+                    setIsEditingTitle(true);
+                  }}
+                >
+                  {selectedConversation.title || 'Untitled Conversation'}
+                </h2>
+              )}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => resumeConversation(selectedConversation.cliType, selectedConversation.cliSessionId)}

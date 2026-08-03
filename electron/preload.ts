@@ -75,34 +75,6 @@ const api: CLIManagerAPI = {
 
     deleteEnvVar: (cliType: CLIType, key: string) =>
       ipcRenderer.invoke('config:deleteEnvVar', cliType, key),
-
-    // Settings.json for Claude
-    getSettings: () =>
-      ipcRenderer.invoke('config:getSettings'),
-
-    setSettings: (settings: Record<string, unknown>) =>
-      ipcRenderer.invoke('config:setSettings', settings),
-
-    // Apps.json for Copilot
-    getApps: () =>
-      ipcRenderer.invoke('config:getApps'),
-
-    setApps: (apps: Record<string, unknown>) =>
-      ipcRenderer.invoke('config:setApps', apps),
-
-    // Config.toml for Codex
-    getCodexConfig: () =>
-      ipcRenderer.invoke('config:getCodexConfig'),
-
-    setCodexConfig: (content: string) =>
-      ipcRenderer.invoke('config:setCodexConfig', content),
-
-    // Settings.json for Qoder
-    getQoderSettings: () =>
-      ipcRenderer.invoke('config:getQoderSettings'),
-
-    setQoderSettings: (settings: Record<string, unknown>) =>
-      ipcRenderer.invoke('config:setQoderSettings', settings),
   },
 
   // Conversation management
