@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '../../stores';
 import { canCreateTerminalSession, getTerminalSessionLimitMessage } from '../../utils/sessionLimits';
 import type { CLIType, ConversationStats } from '../../types';
+import { getCLILabel, getCLIPrimaryColor } from '../../utils/cliUtils';
+import { StatusDot } from '../shared/StatusDot';
 
 export const Dashboard: React.FC = () => {
   const { statuses, updateStatus, addSession, setActiveCLI, setActiveSession, setActiveView, sessions, addNotification } = useAppStore();
@@ -129,17 +131,7 @@ export const Dashboard: React.FC = () => {
     <div className="bg-bg-secondary rounded-lg p-4 border border-bg-tertiary">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-lg font-medium text-text-primary">{title}</h3>
-        <span
-          className={`w-3 h-3 rounded-full ${
-            !status
-              ? 'bg-gray-500'
-              : !status.installed
-              ? 'bg-red-500'
-              : status.running
-              ? 'bg-green-500'
-              : 'bg-yellow-500'
-          }`}
-        />
+        <StatusDot status={status} size="md" />
       </div>
       {status ? (
         <div className="space-y-2 text-sm">
@@ -217,24 +209,24 @@ export const Dashboard: React.FC = () => {
       {/* Status Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <StatusCard
-          title="Copilot CLI"
+          title={`${getCLILabel('copilot')} CLI`}
           status={statuses.copilot}
-          color="bg-copilot-primary"
+          color={getCLIPrimaryColor('copilot')}
         />
         <StatusCard
-          title="Qoder CLI"
+          title={`${getCLILabel('qoder')} CLI`}
           status={statuses.qoder}
-          color="bg-qoder-primary"
+          color={getCLIPrimaryColor('qoder')}
         />
         <StatusCard
-          title="Claude CLI"
+          title={`${getCLILabel('claude')} CLI`}
           status={statuses.claude}
-          color="bg-claude-primary"
+          color={getCLIPrimaryColor('claude')}
         />
         <StatusCard
-          title="Codex CLI"
+          title={`${getCLILabel('codex')} CLI`}
           status={statuses.codex}
-          color="bg-codex-primary"
+          color={getCLIPrimaryColor('codex')}
         />
       </div>
 

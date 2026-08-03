@@ -8,6 +8,7 @@ import {
 } from '../../utils/sessionLimits';
 import { formatFilePathForCLI } from '../../../shared/clipboard';
 import type { CLIType } from '../../types';
+import { getCLILabel, getCLIActiveClass } from '../../utils/cliUtils';
 
 export const TerminalPanel: React.FC = () => {
   const { activeCLI, activeSessionId, addSession, removeSession, sessions, addNotification } = useAppStore();
@@ -183,41 +184,41 @@ export const TerminalPanel: React.FC = () => {
           onClick={() => useAppStore.getState().setActiveCLI('qoder')}
           className={`px-6 py-3 text-sm font-medium transition-colors ${
             activeCLI === 'qoder'
-              ? 'bg-qoder-primary text-white'
+              ? getCLIActiveClass('qoder')
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
         >
-          Qoder
+          {getCLILabel('qoder')}
         </button>
         <button
           onClick={() => useAppStore.getState().setActiveCLI('claude')}
           className={`px-6 py-3 text-sm font-medium transition-colors ${
             activeCLI === 'claude'
-              ? 'bg-claude-primary text-white'
+              ? getCLIActiveClass('claude')
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
         >
-          Claude
+          {getCLILabel('claude')}
         </button>
         <button
           onClick={() => useAppStore.getState().setActiveCLI('codex')}
           className={`px-6 py-3 text-sm font-medium transition-colors ${
             activeCLI === 'codex'
-              ? 'bg-codex-primary text-white'
+              ? getCLIActiveClass('codex')
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
         >
-          Codex
+          {getCLILabel('codex')}
         </button>
         <button
           onClick={() => useAppStore.getState().setActiveCLI('copilot')}
           className={`px-6 py-3 text-sm font-medium transition-colors ${
             activeCLI === 'copilot'
-              ? 'bg-copilot-primary text-white'
+              ? getCLIActiveClass('copilot')
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
         >
-          Copilot
+          {getCLILabel('copilot')}
         </button>
       </div>
 

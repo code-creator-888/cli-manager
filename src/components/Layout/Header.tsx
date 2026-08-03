@@ -1,6 +1,8 @@
 import React from 'react';
 import { useAppStore } from '../../stores';
 import { SidebarView } from './Sidebar';
+import { getCLIBadgeClass } from '../../utils/cliUtils';
+import { StatusDot } from '../shared/StatusDot';
 
 interface HeaderProps {
   activeView: SidebarView;
@@ -26,17 +28,7 @@ export const Header: React.FC<HeaderProps> = ({ activeView }) => {
           {viewTitles[activeView]}
         </h1>
         <span
-          className={`text-sm px-2 py-0.5 rounded ${
-            activeCLI === 'claude'
-              ? 'bg-claude-primary/20 text-claude-secondary'
-              : activeCLI === 'copilot'
-              ? 'bg-copilot-primary/20 text-copilot-secondary'
-              : activeCLI === 'codex'
-              ? 'bg-codex-primary/20 text-codex-secondary'
-              : activeCLI === 'qoder'
-              ? 'bg-qoder-primary/20 text-qoder-secondary'
-              : 'bg-gray-500/20 text-gray-400'
-          }`}
+          className={`text-sm px-2 py-0.5 rounded ${getCLIBadgeClass(activeCLI)}`}
         >
           {activeCLI.toUpperCase()}
         </span>
@@ -45,11 +37,7 @@ export const Header: React.FC<HeaderProps> = ({ activeView }) => {
       <div className="ml-auto flex items-center gap-4">
         {status && (
           <div className="flex items-center gap-2 text-sm text-text-secondary">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                status.running ? 'bg-green-500' : status.installed ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
-            />
+            <StatusDot status={status} />
             <span>
               {status.running
                 ? 'Running'

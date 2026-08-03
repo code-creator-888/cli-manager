@@ -1,6 +1,8 @@
 import React from 'react';
 import { useAppStore } from '../../stores';
 import type { ActiveView } from '../../types';
+import { getCLIActiveClass } from '../../utils/cliUtils';
+import { StatusDot } from '../shared/StatusDot';
 
 const claudeIcon = (
   <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" aria-hidden="true">
@@ -65,14 +67,6 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
   const { activeCLI, setActiveCLI, statuses } = useAppStore();
 
-  const cliStatus = (cli: 'claude' | 'copilot' | 'codex' | 'qoder') => {
-    const status = statuses[cli];
-    if (!status) return 'unknown';
-    if (!status.installed) return 'not-installed';
-    if (status.running) return 'running';
-    return 'stopped';
-  };
-
   return (
     <div className="w-16 bg-bg-secondary flex flex-col items-center py-4 border-r border-bg-tertiary">
       {/* CLI Type Selector */}
@@ -81,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           onClick={() => setActiveCLI('qoder')}
           className={`p-3 rounded-lg transition-all ${
             activeCLI === 'qoder'
-              ? 'bg-qoder-primary text-white'
+              ? getCLIActiveClass('qoder')
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
           title="Qoder CLI"
@@ -89,22 +83,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           {qoderIcon}
         </button>
         <div className="flex justify-center">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              cliStatus('qoder') === 'running'
-                ? 'bg-green-500'
-                : cliStatus('qoder') === 'not-installed'
-                ? 'bg-red-500'
-                : 'bg-yellow-500'
-            }`}
-          />
+          <StatusDot status={statuses['qoder']} />
         </div>
 
         <button
           onClick={() => setActiveCLI('claude')}
           className={`p-3 rounded-lg transition-all ${
             activeCLI === 'claude'
-              ? 'bg-claude-primary text-white'
+              ? getCLIActiveClass('claude')
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
           title="Claude CLI"
@@ -112,22 +98,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           {claudeIcon}
         </button>
         <div className="flex justify-center">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              cliStatus('claude') === 'running'
-                ? 'bg-green-500'
-                : cliStatus('claude') === 'not-installed'
-                ? 'bg-red-500'
-                : 'bg-yellow-500'
-            }`}
-          />
+          <StatusDot status={statuses['claude']} />
         </div>
 
         <button
           onClick={() => setActiveCLI('codex')}
           className={`p-3 rounded-lg transition-all ${
             activeCLI === 'codex'
-              ? 'bg-codex-primary text-white'
+              ? getCLIActiveClass('codex')
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
           title="Codex CLI"
@@ -135,22 +113,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           {codexIcon}
         </button>
         <div className="flex justify-center">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              cliStatus('codex') === 'running'
-                ? 'bg-green-500'
-                : cliStatus('codex') === 'not-installed'
-                ? 'bg-red-500'
-                : 'bg-yellow-500'
-            }`}
-          />
+          <StatusDot status={statuses['codex']} />
         </div>
 
         <button
           onClick={() => setActiveCLI('copilot')}
           className={`p-3 rounded-lg transition-all ${
             activeCLI === 'copilot'
-              ? 'bg-copilot-primary text-white'
+              ? getCLIActiveClass('copilot')
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
           title="Copilot CLI"
@@ -158,15 +128,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           {copilotIcon}
         </button>
         <div className="flex justify-center">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              cliStatus('copilot') === 'running'
-                ? 'bg-green-500'
-                : cliStatus('copilot') === 'not-installed'
-                ? 'bg-red-500'
-                : 'bg-yellow-500'
-            }`}
-          />
+          <StatusDot status={statuses['copilot']} />
         </div>
       </div>
 

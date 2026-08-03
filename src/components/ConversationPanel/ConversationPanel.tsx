@@ -3,6 +3,7 @@ import { useAppStore } from '../../stores';
 import { ConversationWithMessages } from '../../types';
 import { MessageBubble } from './MessageBubble';
 import type { CLIType } from '../../types';
+import { getCLILabel, getCLIBadgeClass } from '../../utils/cliUtils';
 
 export const ConversationPanel: React.FC = () => {
   const { activeCLI, conversations, sessions, setActiveConversation, setConversations, removeConversation, removeConversationsForCLI, setConversationMessages, addNotification, addSession, setActiveCLI, setActiveSession, setActiveView } = useAppStore();
@@ -206,7 +207,7 @@ export const ConversationPanel: React.FC = () => {
   const clearCurrentCLIConversations = async () => {
     if (!window.cliManagerAPI || isClearing) return;
 
-    const label = cliLabel(activeCLI);
+    const label = getCLILabel(activeCLI);
     const confirmed = typeof window.confirm === 'function'
       ? window.confirm(`Clear all ${label} conversations? This cannot be undone.`)
       : true;
@@ -257,13 +258,6 @@ export const ConversationPanel: React.FC = () => {
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
 
-  const cliLabel = (cliType: typeof activeCLI) => {
-    if (cliType === 'claude') return 'Claude';
-    if (cliType === 'copilot') return 'Copilot';
-    if (cliType === 'codex') return 'Codex';
-    return 'Qoder';
-  };
-
   return (
     <div className="h-full flex bg-bg-primary">
       {/* Conversation List */}
@@ -272,7 +266,7 @@ export const ConversationPanel: React.FC = () => {
         <div className="p-4 bg-bg-secondary border-b border-bg-tertiary">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-medium text-text-primary">{cliLabel(activeCLI)} Conversations</h2>
+              <h2 className="text-sm font-medium text-text-primary">{getCLILabel(activeCLI)} Conversations</h2>
               <p className="text-xs text-text-secondary">History is scoped to the active CLI.</p>
             </div>
             <button
@@ -280,7 +274,7 @@ export const ConversationPanel: React.FC = () => {
               disabled={isClearing || conversationList.length === 0}
               className="rounded-lg border border-red-500/40 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isClearing ? 'Clearing...' : `Clear ${cliLabel(activeCLI)}`}
+              {isClearing ? 'Clearing...' : `Clear ${getCLILabel(activeCLI)}`}
             </button>
           </div>
           <div className="flex gap-2">
@@ -379,16 +373,8 @@ export const ConversationPanel: React.FC = () => {
                         <span className="text-text-primary font-medium text-sm truncate">
                           {conv.title || 'Untitled Conversation'}
                         </span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                          conv.cliType === 'claude'
-                            ? 'bg-claude-primary/20 text-claude-secondary'
-                            : conv.cliType === 'copilot'
-                            ? 'bg-copilot-primary/20 text-copilot-secondary'
-                            : conv.cliType === 'codex'
-                            ? 'bg-codex-primary/20 text-codex-secondary'
-                            : 'bg-qoder-primary/20 text-qoder-secondary'
-                        }`}>
-                          {cliLabel(conv.cliType)}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${getCLIBadgeClass(conv.cliType)}`}>
+                          {getCLILabel(conv.cliType)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-text-secondary">
@@ -482,7 +468,7 @@ export const ConversationPanel: React.FC = () => {
             </div>
             <div className="flex items-center gap-4 mt-2 text-xs text-text-secondary">
               <span>
-                {cliLabel(selectedConversation.cliType)}
+                {getCLILabel(selectedConversation.cliType)}
               </span>
               <span>
                 Created: {new Date(selectedConversation.createdAt).toLocaleString()}
