@@ -4,7 +4,7 @@ import { canCreateTerminalSession, getTerminalSessionLimitMessage } from '../../
 import type { CLIType, ConversationStats } from '../../types';
 
 export const Dashboard: React.FC = () => {
-  const { statuses, updateStatus, addSession, setActiveCLI, setActiveSession, sessions, addNotification } = useAppStore();
+  const { statuses, updateStatus, addSession, setActiveCLI, setActiveSession, setActiveView, sessions, addNotification } = useAppStore();
   const [stats, setStats] = useState<ConversationStats>({ total: 0, claude: 0, copilot: 0, codex: 0, qoder: 0, favorites: 0 });
   const [terminalError, setTerminalError] = useState<string | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(true);
@@ -32,9 +32,6 @@ export const Dashboard: React.FC = () => {
     };
 
     checkStatus();
-    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
-
-    return () => clearInterval(interval);
   }, [updateStatus, addNotification]);
 
   const fetchStats = useCallback(async () => {
@@ -115,6 +112,7 @@ export const Dashboard: React.FC = () => {
       });
       setActiveCLI(cliType);
       setActiveSession(sessionId);
+      setActiveView('terminal');
     } catch (error) {
       console.error(`Failed to create ${cliType} terminal session:`, error);
       const message = error instanceof Error ? error.message : String(error);

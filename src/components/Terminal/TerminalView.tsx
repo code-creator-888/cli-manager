@@ -325,7 +325,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     });
     containerRef.current.addEventListener('contextmenu', handleContextMenu);
     containerRef.current.addEventListener('paste', handlePaste, true);
-    containerRef.current.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('copy', handleCopy, true);
     window.addEventListener('keydown', handleGlobalKeyDown, true);
 
@@ -341,7 +340,6 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       window.removeEventListener('resize', handleWindowResize);
       containerRef.current?.removeEventListener('contextmenu', handleContextMenu);
       containerRef.current?.removeEventListener('paste', handlePaste, true);
-      containerRef.current?.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('copy', handleCopy, true);
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
       dataDisposable.dispose();

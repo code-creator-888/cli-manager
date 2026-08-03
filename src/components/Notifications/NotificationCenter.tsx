@@ -1,15 +1,32 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useAppStore } from '../../stores';
 
 export const NotificationCenter: React.FC = () => {
   const { notifications, removeNotification } = useAppStore();
+  const timersRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
-    const timers = notifications.map((notification) =>
-      window.setTimeout(() => removeNotification(notification.id), 5000)
-    );
+    const timers = timersRef.current;
 
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
+    // Start a timer for any notification that doesn't have one yet.
+    notifications.forEach((notification) => {
+      if (!timers.has(notification.id)) {
+        const timer = window.setTimeout(() => {
+          timers.delete(notification.id);
+          removeNotification(notification.id);
+        }, 5000);
+        timers.set(notification.id, timer);
+      }
+    });
+
+    // Clear timers for notifications that were manually dismissed.
+    const currentIds = new Set(notifications.map((n) => n.id));
+    timers.forEach((timer, id) => {
+      if (!currentIds.has(id)) {
+        window.clearTimeout(timer);
+        timers.delete(id);
+      }
+    });
   }, [notifications, removeNotification]);
 
   if (notifications.length === 0) {
