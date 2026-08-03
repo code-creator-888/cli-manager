@@ -187,6 +187,7 @@ export const ConversationPanel: React.FC = () => {
 
   const deleteConversation = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!window.confirm('Delete this conversation?')) return;
     if (!window.cliManagerAPI) return;
     try {
       await window.cliManagerAPI.conversation.delete(id);

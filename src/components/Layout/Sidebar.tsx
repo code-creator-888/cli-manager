@@ -138,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           onClick={() => onViewChange('terminal')}
           className={`p-3 rounded-lg transition-all ${
             activeView === 'terminal'
-              ? 'bg-bg-tertiary text-text-primary'
+              ? 'bg-bg-primary text-text-primary ring-1 ring-text-secondary/30'
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
           title="Terminal"
@@ -150,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           onClick={() => onViewChange('conversation')}
           className={`p-3 rounded-lg transition-all ${
             activeView === 'conversation'
-              ? 'bg-bg-tertiary text-text-primary'
+              ? 'bg-bg-primary text-text-primary ring-1 ring-text-secondary/30'
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
           title="Conversations"
@@ -162,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
           onClick={() => onViewChange('dashboard')}
           className={`p-3 rounded-lg transition-all ${
             activeView === 'dashboard'
-              ? 'bg-bg-tertiary text-text-primary'
+              ? 'bg-bg-primary text-text-primary ring-1 ring-text-secondary/30'
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
           }`}
           title="Dashboard"

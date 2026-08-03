@@ -223,48 +223,46 @@ export const TerminalPanel: React.FC = () => {
       </div>
 
       {/* Session Tabs for current CLI */}
-      {currentCLISessions.length > 0 && (
-        <div className="flex bg-bg-secondary border-b border-bg-tertiary overflow-x-auto">
-          {currentCLISessions.map((session, index) => (
-            <div
-              key={session.id}
-              className={`flex items-center gap-2 px-4 py-2 border-r border-bg-tertiary cursor-pointer ${
-                currentSession?.id === session.id
-                  ? 'bg-bg-primary text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-              }`}
-              onClick={() => useAppStore.getState().setActiveSession(session.id)}
-            >
-              <span className="text-sm">Terminal {index + 1}</span>
-              <button
-                className="text-text-secondary hover:text-text-primary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeSession(session.id);
-                }}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                </svg>
-              </button>
-            </div>
-          ))}
-          <button
-            onClick={() => createSession(activeCLI)}
-            disabled={reachedSessionLimit}
-            className={`px-3 py-2 ${
-              reachedSessionLimit
-                ? 'text-text-secondary/50 cursor-not-allowed'
+      <div className="flex bg-bg-secondary border-b border-bg-tertiary overflow-x-auto">
+        {currentCLISessions.map((session, index) => (
+          <div
+            key={session.id}
+            className={`flex items-center gap-2 px-4 py-2 border-r border-bg-tertiary cursor-pointer ${
+              currentSession?.id === session.id
+                ? 'bg-bg-primary text-text-primary'
                 : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
             }`}
-            title={reachedSessionLimit ? getTerminalSessionLimitMessage(activeCLI) : 'New Terminal'}
+            onClick={() => useAppStore.getState().setActiveSession(session.id)}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-            </svg>
-          </button>
-        </div>
-      )}
+            <span className="text-sm">Terminal {index + 1}</span>
+            <button
+              className="text-text-secondary hover:text-text-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeSession(session.id);
+              }}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              </svg>
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => createSession(activeCLI)}
+          disabled={reachedSessionLimit}
+          className={`px-3 py-2 ${
+            reachedSessionLimit
+              ? 'text-text-secondary/50 cursor-not-allowed'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+          title={reachedSessionLimit ? getTerminalSessionLimitMessage(activeCLI) : 'New Terminal'}
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          </svg>
+        </button>
+      </div>
 
       {/* Terminal Content - render ALL sessions (both Claude and Copilot), hide inactive */}
       <div className="flex-1 relative" style={{ minHeight: 0 }}>
