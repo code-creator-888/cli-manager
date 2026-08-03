@@ -36,7 +36,7 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  activeCLI: 'copilot',
+  activeCLI: 'qoder',
   activeSessionId: null,
   activeView: 'terminal',
   sessions: {},

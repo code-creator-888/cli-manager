@@ -180,16 +180,6 @@ export const TerminalPanel: React.FC = () => {
       {/* CLI Type Tabs */}
       <div className="flex bg-bg-secondary border-b border-bg-tertiary">
         <button
-          onClick={() => useAppStore.getState().setActiveCLI('copilot')}
-          className={`px-6 py-3 text-sm font-medium transition-colors ${
-            activeCLI === 'copilot'
-              ? 'bg-copilot-primary text-white'
-              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-          }`}
-        >
-          Copilot
-        </button>
-        <button
           onClick={() => useAppStore.getState().setActiveCLI('qoder')}
           className={`px-6 py-3 text-sm font-medium transition-colors ${
             activeCLI === 'qoder'
@@ -218,6 +208,16 @@ export const TerminalPanel: React.FC = () => {
           }`}
         >
           Codex
+        </button>
+        <button
+          onClick={() => useAppStore.getState().setActiveCLI('copilot')}
+          className={`px-6 py-3 text-sm font-medium transition-colors ${
+            activeCLI === 'copilot'
+              ? 'bg-copilot-primary text-white'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+        >
+          Copilot
         </button>
       </div>
 

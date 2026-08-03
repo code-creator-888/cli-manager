@@ -78,29 +78,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
       {/* CLI Type Selector */}
       <div className="flex flex-col gap-2 mb-8">
         <button
-          onClick={() => setActiveCLI('copilot')}
-          className={`p-3 rounded-lg transition-all ${
-            activeCLI === 'copilot'
-              ? 'bg-copilot-primary text-white'
-              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-          }`}
-          title="Copilot CLI"
-        >
-          {copilotIcon}
-        </button>
-        <div className="flex justify-center">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              cliStatus('copilot') === 'running'
-                ? 'bg-green-500'
-                : cliStatus('copilot') === 'not-installed'
-                ? 'bg-red-500'
-                : 'bg-yellow-500'
-            }`}
-          />
-        </div>
-
-        <button
           onClick={() => setActiveCLI('qoder')}
           className={`p-3 rounded-lg transition-all ${
             activeCLI === 'qoder'
@@ -163,6 +140,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
               cliStatus('codex') === 'running'
                 ? 'bg-green-500'
                 : cliStatus('codex') === 'not-installed'
+                ? 'bg-red-500'
+                : 'bg-yellow-500'
+            }`}
+          />
+        </div>
+
+        <button
+          onClick={() => setActiveCLI('copilot')}
+          className={`p-3 rounded-lg transition-all ${
+            activeCLI === 'copilot'
+              ? 'bg-copilot-primary text-white'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+          title="Copilot CLI"
+        >
+          {copilotIcon}
+        </button>
+        <div className="flex justify-center">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              cliStatus('copilot') === 'running'
+                ? 'bg-green-500'
+                : cliStatus('copilot') === 'not-installed'
                 ? 'bg-red-500'
                 : 'bg-yellow-500'
             }`}
