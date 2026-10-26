@@ -1,29 +1,20 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../../stores';
-import { ConversationWithMessages } from '../../types';
-import { MessageBubble } from './MessageBubble';
 import type { CLIType } from '../../types';
 import { getCLILabel, getCLIBadgeClass } from '../../utils/cliUtils';
 
 export const ConversationPanel: React.FC = () => {
-  const { activeCLI, conversations, sessions, setActiveConversation, setConversations, appendConversations, removeConversation, removeConversationsForCLI, setConversationMessages, addNotification, addSession, setActiveCLI, setActiveSession, setActiveView } = useAppStore();
+  const { activeCLI, conversations, sessions, setActiveConversation, setConversations, appendConversations, removeConversation, removeConversationsForCLI, addNotification, addSession, setActiveCLI, setActiveSession, setActiveView } = useAppStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showFavorites, setShowFavorites] = useState(false);
-  const [selectedConversation, setSelectedConversation] = useState<ConversationWithMessages | null>(null);
-  const [loadingConversationId, setLoadingConversationId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editingTitleValue, setEditingTitleValue] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
   const loadConversationsRef = useRef<() => void>(() => undefined);
-  const detailsRequestRef = useRef(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -34,7 +25,6 @@ export const ConversationPanel: React.FC = () => {
   }, [search]);
 
   useEffect(() => {
-    setSelectedConversation(null);
     setActiveConversation(null);
   }, [activeCLI, setActiveConversation]);
 
@@ -52,16 +42,6 @@ export const ConversationPanel: React.FC = () => {
     const unsubscribeMessage = window.cliManagerAPI.conversation.onMessage(
       (conversationId, message) => {
         useAppStore.getState().addConversationMessage(conversationId, message);
-
-        // If this is the selected conversation, update it
-        if (useAppStore.getState().activeConversationId === conversationId) {
-          setSelectedConversation(prev => prev ? {
-            ...prev,
-            messages: [...prev.messages, message],
-            updatedAt: message.timestamp,
-            messageCount: prev.messageCount + 1,
-          } : null);
-        }
       }
     );
 
@@ -70,11 +50,6 @@ export const ConversationPanel: React.FC = () => {
       unsubscribeMessage();
     };
   }, []);
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedConversation?.messages]);
 
   const loadConversations = useCallback(async () => {
     if (!window.cliManagerAPI) return;
@@ -110,30 +85,6 @@ export const ConversationPanel: React.FC = () => {
   useEffect(() => {
     loadConversationsRef.current = loadConversations;
   }, [loadConversations]);
-
-  const loadConversationDetails = async (id: string) => {
-    if (!window.cliManagerAPI) return;
-    const requestId = ++detailsRequestRef.current;
-    setLoadingConversationId(id);
-    try {
-      const result = await window.cliManagerAPI.conversation.getWithMessages(id);
-      if (requestId === detailsRequestRef.current && result) {
-        setSelectedConversation(result);
-        setActiveConversation(id);
-        setConversationMessages(id, result.messages);
-      }
-    } catch (e) {
-      console.error('Failed to load conversation details:', e);
-      addNotification({
-        type: 'error',
-        message: `Failed to load conversation details: ${e instanceof Error ? e.message : String(e)}`,
-      });
-    } finally {
-      if (requestId === detailsRequestRef.current) {
-        setLoadingConversationId(null);
-      }
-    }
-  };
 
   const resumeConversation = async (cliType: CLIType, cliSessionId: string | undefined) => {
     if (!cliSessionId) {
@@ -183,9 +134,6 @@ export const ConversationPanel: React.FC = () => {
     try {
       await window.cliManagerAPI.conversation.toggleFavorite(id);
       useAppStore.getState().updateConversation(id, { favorite: !conversations[id]?.favorite });
-      if (selectedConversation?.id === id) {
-        setSelectedConversation(prev => prev ? { ...prev, favorite: !prev.favorite } : null);
-      }
     } catch (e) {
       console.error('Failed to toggle favorite:', e);
       addNotification({
@@ -202,10 +150,6 @@ export const ConversationPanel: React.FC = () => {
     try {
       await window.cliManagerAPI.conversation.delete(id);
       removeConversation(id);
-      if (selectedConversation?.id === id) {
-        setSelectedConversation(null);
-        setActiveConversation(null);
-      }
     } catch (e) {
       console.error('Failed to delete conversation:', e);
       addNotification({
@@ -231,7 +175,6 @@ export const ConversationPanel: React.FC = () => {
     try {
       const deletedCount = await window.cliManagerAPI.conversation.deleteByCLI(activeCLI);
       removeConversationsForCLI(activeCLI);
-      setSelectedConversation(null);
       setActiveConversation(null);
       addNotification({
         type: 'success',
@@ -274,26 +217,6 @@ export const ConversationPanel: React.FC = () => {
     }
   }, [activeCLI, debouncedSearch, showFavorites, offset, hasMore, isLoadingMore, appendConversations, addNotification]);
 
-  const confirmTitleEdit = async () => {
-    if (!selectedConversation || !window.cliManagerAPI) return;
-    const trimmed = editingTitleValue.trim();
-    if (!trimmed) { setIsEditingTitle(false); return; }
-    const previousTitle = selectedConversation.title;
-    setSelectedConversation(prev => prev ? { ...prev, title: trimmed } : null);
-    useAppStore.getState().updateConversation(selectedConversation.id, { title: trimmed });
-    setIsEditingTitle(false);
-    try {
-      await window.cliManagerAPI.conversation.updateTitle(selectedConversation.id, trimmed);
-    } catch (e) {
-      setSelectedConversation(prev => prev ? { ...prev, title: previousTitle } : null);
-      useAppStore.getState().updateConversation(selectedConversation.id, { title: previousTitle });
-      addNotification({ type: 'error', message: `Failed to update title: ${e instanceof Error ? e.message : String(e)}` });
-    }
-  };
-
-  useEffect(() => { setIsEditingTitle(false); }, [selectedConversation?.id]);
-  useEffect(() => { if (isEditingTitle) titleInputRef.current?.focus(); }, [isEditingTitle]);
-
   const formatDate = (date: Date) => {
     const d = new Date(date);
     const now = new Date();
@@ -321,7 +244,7 @@ export const ConversationPanel: React.FC = () => {
   return (
     <div className="h-full flex bg-bg-primary">
       {/* Conversation List */}
-      <div className={`flex flex-col border-r border-bg-tertiary ${selectedConversation ? 'w-80' : 'flex-1'}`}>
+      <div className="flex flex-col border-r border-bg-tertiary flex-1">
         {/* Search and Filter */}
         <div className="p-4 bg-bg-secondary border-b border-bg-tertiary">
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -403,14 +326,7 @@ export const ConversationPanel: React.FC = () => {
               {conversationList.map((conv) => (
                 <div
                   key={conv.id}
-                  onClick={() => {
-                    if (loadingConversationId !== conv.id) {
-                      loadConversationDetails(conv.id);
-                    }
-                  }}
-                  className={`p-4 hover:bg-bg-secondary/50 transition-colors cursor-pointer ${
-                    selectedConversation?.id === conv.id ? 'bg-bg-secondary/70' : ''
-                  }`}
+                  className="p-4"
                 >
                   <div className="flex items-start gap-3">
                     {/* Favorite button */}
@@ -441,12 +357,6 @@ export const ConversationPanel: React.FC = () => {
                         <span>{formatDate(conv.updatedAt)}</span>
                         <span>•</span>
                         <span>{conv.messageCount} messages</span>
-                        {loadingConversationId === conv.id && (
-                          <>
-                            <span>•</span>
-                            <span>Loading...</span>
-                          </>
-                        )}
                       </div>
                     </div>
 
@@ -496,109 +406,6 @@ export const ConversationPanel: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Conversation Detail */}
-      {selectedConversation && (
-        <div className="flex-1 flex flex-col">
-          {/* Header */}
-          <div className="p-4 bg-bg-secondary border-b border-bg-tertiary">
-            <div className="flex items-center justify-between">
-              {isEditingTitle ? (
-                <input
-                  ref={titleInputRef}
-                  value={editingTitleValue}
-                  onChange={(e) => setEditingTitleValue(e.target.value)}
-                  onBlur={confirmTitleEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.currentTarget.blur();
-                    if (e.key === 'Escape') setIsEditingTitle(false);
-                  }}
-                  className="text-lg font-medium text-text-primary bg-bg-tertiary rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-0 flex-1"
-                />
-              ) : (
-                <h2
-                  className="text-lg font-medium text-text-primary cursor-pointer hover:text-blue-300 transition-colors"
-                  title="Click to edit title"
-                  onClick={() => {
-                    setEditingTitleValue(selectedConversation.title || '');
-                    setIsEditingTitle(true);
-                  }}
-                >
-                  {selectedConversation.title || 'Untitled Conversation'}
-                </h2>
-              )}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => resumeConversation(selectedConversation.cliType, selectedConversation.cliSessionId)}
-                  disabled={!selectedConversation.cliSessionId}
-                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
-                    selectedConversation.cliSessionId
-                      ? 'border-blue-500/40 bg-blue-600/20 text-blue-300 hover:bg-blue-600/30'
-                      : 'cursor-not-allowed border-bg-tertiary bg-bg-tertiary/40 text-text-secondary/50'
-                  }`}
-                  title={selectedConversation.cliSessionId ? '恢复此对话的上下文继续聊' : '无法恢复上下文：缺少 CLI session'}
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="5" width="18" height="14" rx="2" />
-                    <path d="m7 10 3 2-3 2" />
-                    <path d="M13 15h5" />
-                  </svg>
-                  继续对话
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedConversation(null);
-                    setActiveConversation(null);
-                  }}
-                  className="text-text-secondary hover:text-text-primary p-1"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 mt-2 text-xs text-text-secondary">
-              <span>
-                {getCLILabel(selectedConversation.cliType)}
-              </span>
-              <span>
-                Created: {new Date(selectedConversation.createdAt).toLocaleString()}
-              </span>
-              <span>
-                {selectedConversation.messages.length} messages
-              </span>
-              <button
-                onClick={(e) => toggleFavorite(selectedConversation.id, e)}
-                className={`flex items-center gap-1 ${
-                  selectedConversation.favorite
-                    ? 'text-yellow-500'
-                    : 'text-text-secondary hover:text-yellow-500'
-                }`}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                </svg>
-                {selectedConversation.favorite ? 'Favorited' : 'Add to favorites'}
-              </button>
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-            {selectedConversation.messages.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-text-secondary">No messages in this conversation</div>
-              </div>
-            ) : (
-              selectedConversation.messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
-              ))
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-      )}
     </div>
   );
 };

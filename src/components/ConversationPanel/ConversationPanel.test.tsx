@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { ConversationPanel } from './ConversationPanel';
 import { useAppStore } from '../../stores';
-import type { CLIManagerAPI, Conversation, ConversationWithMessages } from '../../../shared/ipc';
+import type { CLIManagerAPI, Conversation } from '../../../shared/ipc';
 
 const INITIAL_STATE = useAppStore.getState();
 
@@ -28,16 +28,14 @@ function makeConversations(count: number, prefix: string): Conversation[] {
 
 interface MockApiOverrides {
   list?: ReturnType<typeof vi.fn>;
-  getWithMessages?: ReturnType<typeof vi.fn>;
-  updateTitle?: ReturnType<typeof vi.fn>;
 }
 
 function mockCliManagerAPI(overrides: MockApiOverrides = {}) {
   const api = {
     conversation: {
       list: overrides.list ?? vi.fn().mockResolvedValue([]),
-      getWithMessages: overrides.getWithMessages ?? vi.fn().mockResolvedValue(null),
-      updateTitle: overrides.updateTitle ?? vi.fn().mockResolvedValue(undefined),
+      getWithMessages: vi.fn().mockResolvedValue(null),
+      updateTitle: vi.fn().mockResolvedValue(undefined),
       onCreated: vi.fn().mockReturnValue(() => {}),
       onMessage: vi.fn().mockReturnValue(() => {}),
       toggleFavorite: vi.fn().mockResolvedValue(undefined),
@@ -127,110 +125,5 @@ describe('ConversationPanel — pagination', () => {
     // The failed page never called appendConversations, so the store still only has page 1.
     expect(Object.keys(useAppStore.getState().conversations)).toHaveLength(50);
     expect(screen.getByText('Load more')).toBeInTheDocument();
-  });
-});
-
-describe('ConversationPanel — conversation title editing', () => {
-  function withMessages(id: string, overrides: Partial<Conversation> = {}): ConversationWithMessages {
-    return {
-      ...conversation(id, overrides),
-      messages: [],
-    };
-  }
-
-  it('enters edit mode on title click, and confirms the new title on Enter', async () => {
-    const list = vi.fn().mockResolvedValue([conversation('a', { title: 'Old title' })]);
-    const getWithMessages = vi.fn().mockResolvedValue(withMessages('a', { title: 'Old title' }));
-    const updateTitle = vi.fn().mockResolvedValue(undefined);
-    mockCliManagerAPI({ list, getWithMessages, updateTitle });
-
-    render(<ConversationPanel />);
-
-    const listItemTitle = await screen.findByText('Old title');
-    fireEvent.click(listItemTitle);
-
-    const heading = await screen.findByTitle('Click to edit title');
-    fireEvent.click(heading);
-
-    const input = await screen.findByDisplayValue('Old title');
-    fireEvent.change(input, { target: { value: 'New title' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => expect(updateTitle).toHaveBeenCalledWith('a', 'New title'));
-    expect(await screen.findByTitle('Click to edit title')).toHaveTextContent('New title');
-    expect(useAppStore.getState().conversations.a.title).toBe('New title');
-  });
-
-  it('rolls back to the previous title and shows an error notification when the update fails', async () => {
-    const list = vi.fn().mockResolvedValue([conversation('a', { title: 'Old title' })]);
-    const getWithMessages = vi.fn().mockResolvedValue(withMessages('a', { title: 'Old title' }));
-    const updateTitle = vi.fn().mockRejectedValue(new Error('server rejected'));
-    mockCliManagerAPI({ list, getWithMessages, updateTitle });
-
-    render(<ConversationPanel />);
-
-    const listItemTitle = await screen.findByText('Old title');
-    fireEvent.click(listItemTitle);
-
-    const heading = await screen.findByTitle('Click to edit title');
-    fireEvent.click(heading);
-
-    const input = await screen.findByDisplayValue('Old title');
-    fireEvent.change(input, { target: { value: 'New title' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    // Optimistic update happens first: title flips to "New title" immediately,
-    // then rolls back once the rejected updateTitle call resolves.
-    await waitFor(() => {
-      const notifications = useAppStore.getState().notifications;
-      expect(notifications.some((n) => n.type === 'error' && n.message.includes('server rejected'))).toBe(true);
-    });
-    expect(await screen.findByTitle('Click to edit title')).toHaveTextContent('Old title');
-    expect(useAppStore.getState().conversations.a.title).toBe('Old title');
-  });
-
-  it('cancels editing on Escape without calling updateTitle or changing the title', async () => {
-    const list = vi.fn().mockResolvedValue([conversation('a', { title: 'Old title' })]);
-    const getWithMessages = vi.fn().mockResolvedValue(withMessages('a', { title: 'Old title' }));
-    const updateTitle = vi.fn().mockResolvedValue(undefined);
-    mockCliManagerAPI({ list, getWithMessages, updateTitle });
-
-    render(<ConversationPanel />);
-
-    const listItemTitle = await screen.findByText('Old title');
-    fireEvent.click(listItemTitle);
-
-    const heading = await screen.findByTitle('Click to edit title');
-    fireEvent.click(heading);
-
-    const input = await screen.findByDisplayValue('Old title');
-    fireEvent.change(input, { target: { value: 'Discarded edit' } });
-    fireEvent.keyDown(input, { key: 'Escape' });
-
-    expect(await screen.findByTitle('Click to edit title')).toHaveTextContent('Old title');
-    expect(updateTitle).not.toHaveBeenCalled();
-  });
-
-  it('does not call updateTitle when the trimmed title is empty', async () => {
-    const list = vi.fn().mockResolvedValue([conversation('a', { title: 'Old title' })]);
-    const getWithMessages = vi.fn().mockResolvedValue(withMessages('a', { title: 'Old title' }));
-    const updateTitle = vi.fn().mockResolvedValue(undefined);
-    mockCliManagerAPI({ list, getWithMessages, updateTitle });
-
-    render(<ConversationPanel />);
-
-    const listItemTitle = await screen.findByText('Old title');
-    fireEvent.click(listItemTitle);
-
-    const heading = await screen.findByTitle('Click to edit title');
-    fireEvent.click(heading);
-
-    const input = await screen.findByDisplayValue('Old title');
-    fireEvent.change(input, { target: { value: '   ' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => expect(screen.queryByDisplayValue('   ')).not.toBeInTheDocument());
-    expect(updateTitle).not.toHaveBeenCalled();
-    expect(useAppStore.getState().conversations.a.title).toBe('Old title');
   });
 });
