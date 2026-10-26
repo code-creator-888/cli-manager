@@ -178,7 +178,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const remainingConversations = { ...state.conversations };
       const remainingMessages = { ...state.conversationMessages };
       const removedIds = Object.values(state.conversations)
-        .filter((conversation) => conversation.cliType === cliType)
+        .filter((conversation) => conversation.cliType === cliType && !conversation.favorite)
         .map((conversation) => conversation.id);
 
       for (const conversationId of removedIds) {

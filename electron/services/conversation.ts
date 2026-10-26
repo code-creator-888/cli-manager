@@ -75,6 +75,14 @@ export interface ConversationWithMessages extends Conversation {
   messages: ConversationMessage[];
 }
 
+const MESSAGE_SEARCH_DELETE_TRIGGER_DDL = `
+  CREATE TRIGGER IF NOT EXISTS trg_messages_search_delete
+  AFTER DELETE ON conversation_messages
+  BEGIN
+    DELETE FROM conversation_search WHERE entry_id = 'message:' || OLD.id;
+  END;
+`;
+
 export class ConversationService {
   private db: Database.Database | null = null;
   private dbPath: string;
@@ -200,11 +208,7 @@ export class ConversationService {
         VALUES (NEW.conversation_id, 'message:' || NEW.id, NEW.content);
       END;
 
-      CREATE TRIGGER IF NOT EXISTS trg_messages_search_delete
-      AFTER DELETE ON conversation_messages
-      BEGIN
-        DELETE FROM conversation_search WHERE entry_id = 'message:' || OLD.id;
-      END;
+      ${MESSAGE_SEARCH_DELETE_TRIGGER_DDL}
     `);
   }
 
@@ -345,14 +349,45 @@ export class ConversationService {
   }
 
   async delete(id: string): Promise<void> {
-    // CASCADE will delete messages automatically
-    this.db!.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+    const db = this.db!;
+    // Same per-message trigger cost as deleteByCLI; drop it for the duration
+    // so deleting one large conversation stays fast.
+    const del = db.transaction(() => {
+      db.exec('DROP TRIGGER IF EXISTS trg_messages_search_delete');
+      try {
+        db.prepare('DELETE FROM conversation_search WHERE conversation_id = ?').run(id);
+        db.prepare('DELETE FROM conversation_messages WHERE conversation_id = ?').run(id);
+        db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+      } finally {
+        db.exec(MESSAGE_SEARCH_DELETE_TRIGGER_DDL);
+      }
+    });
+    del();
   }
 
   async deleteByCLI(cliType: CLIType): Promise<number> {
-    // CASCADE and search triggers will clean up messages and FTS rows.
-    const result = this.db!.prepare('DELETE FROM conversations WHERE cli_type = ?').run(cliType);
-    return result.changes;
+    const db = this.db!;
+    // Deleting row-by-row through the per-message search trigger costs one full
+    // scan of the FTS table per deleted message (entry_id is unindexed), which
+    // makes a bulk clear take minutes. Drop the trigger for the duration and
+    // remove the affected search rows in a single pass instead.
+    const clear = db.transaction(() => {
+      db.exec('DROP TRIGGER IF EXISTS trg_messages_search_delete');
+      try {
+        db.prepare(`
+          DELETE FROM conversation_search
+          WHERE conversation_id IN (SELECT id FROM conversations WHERE cli_type = ? AND favorite = 0)
+        `).run(cliType);
+        db.prepare(`
+          DELETE FROM conversation_messages
+          WHERE conversation_id IN (SELECT id FROM conversations WHERE cli_type = ? AND favorite = 0)
+        `).run(cliType);
+        return db.prepare('DELETE FROM conversations WHERE cli_type = ? AND favorite = 0').run(cliType).changes;
+      } finally {
+        db.exec(MESSAGE_SEARCH_DELETE_TRIGGER_DDL);
+      }
+    });
+    return clear();
   }
 
   async toggleFavorite(id: string): Promise<void> {

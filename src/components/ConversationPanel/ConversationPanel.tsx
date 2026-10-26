@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../../stores';
-import type { CLIType } from '../../types';
+import type { CLIType, Conversation } from '../../types';
 import { getCLILabel, getCLIBadgeClass } from '../../utils/cliUtils';
 
 export const ConversationPanel: React.FC = () => {
@@ -164,7 +164,7 @@ export const ConversationPanel: React.FC = () => {
 
     const label = getCLILabel(activeCLI);
     const confirmed = typeof window.confirm === 'function'
-      ? window.confirm(`Clear all ${label} conversations? This cannot be undone.`)
+      ? window.confirm(`Clear all non-favorite ${label} conversations? This cannot be undone.`)
       : true;
 
     if (!confirmed) {
@@ -241,6 +241,85 @@ export const ConversationPanel: React.FC = () => {
     [conversations]
   );
 
+  const favoriteConversations = useMemo(
+    () => conversationList.filter((conv) => conv.favorite),
+    [conversationList]
+  );
+
+  const normalConversations = useMemo(
+    () => conversationList.filter((conv) => !conv.favorite),
+    [conversationList]
+  );
+
+  const renderConversationItem = (conv: Conversation) => (
+    <div
+      key={conv.id}
+      className="p-4"
+    >
+      <div className="flex items-start gap-3">
+        {/* Favorite button */}
+        <button
+          onClick={(e) => toggleFavorite(conv.id, e)}
+          className={`mt-0.5 ${
+            conv.favorite
+              ? 'text-yellow-500'
+              : 'text-text-secondary hover:text-yellow-500'
+          }`}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+          </svg>
+        </button>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-text-primary font-medium text-sm truncate">
+              {conv.title || 'Untitled Conversation'}
+            </span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${getCLIBadgeClass(conv.cliType)}`}>
+              {getCLILabel(conv.cliType)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-text-secondary">
+            <span>{formatDate(conv.updatedAt)}</span>
+            <span>•</span>
+            <span>{conv.messageCount} messages</span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); resumeConversation(conv.cliType, conv.cliSessionId); }}
+            disabled={!conv.cliSessionId}
+            className={`p-1 ${
+              conv.cliSessionId
+                ? 'text-text-secondary hover:text-blue-400'
+                : 'cursor-not-allowed text-text-secondary/40'
+            }`}
+            title={conv.cliSessionId ? '继续对话（恢复上下文）' : '无法恢复上下文：缺少 CLI session'}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="m7 10 3 2-3 2" />
+              <path d="M13 15h5" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => deleteConversation(conv.id, e)}
+            className="text-text-secondary hover:text-red-500 p-1"
+            title="Delete"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="h-full flex bg-bg-primary">
       {/* Conversation List */}
@@ -254,7 +333,7 @@ export const ConversationPanel: React.FC = () => {
             </div>
             <button
               onClick={clearCurrentCLIConversations}
-              disabled={isClearing || conversationList.length === 0}
+              disabled={isClearing || normalConversations.length === 0}
               className="rounded-lg border border-red-500/40 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isClearing ? 'Clearing...' : `Clear ${getCLILabel(activeCLI)}`}
@@ -323,74 +402,18 @@ export const ConversationPanel: React.FC = () => {
             </div>
           ) : (
             <div className="divide-y divide-bg-tertiary">
-              {conversationList.map((conv) => (
-                <div
-                  key={conv.id}
-                  className="p-4"
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Favorite button */}
-                    <button
-                      onClick={(e) => toggleFavorite(conv.id, e)}
-                      className={`mt-0.5 ${
-                        conv.favorite
-                          ? 'text-yellow-500'
-                          : 'text-text-secondary hover:text-yellow-500'
-                      }`}
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                      </svg>
-                    </button>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-text-primary font-medium text-sm truncate">
-                          {conv.title || 'Untitled Conversation'}
-                        </span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${getCLIBadgeClass(conv.cliType)}`}>
-                          {getCLILabel(conv.cliType)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-text-secondary">
-                        <span>{formatDate(conv.updatedAt)}</span>
-                        <span>•</span>
-                        <span>{conv.messageCount} messages</span>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); resumeConversation(conv.cliType, conv.cliSessionId); }}
-                        disabled={!conv.cliSessionId}
-                        className={`p-1 ${
-                          conv.cliSessionId
-                            ? 'text-text-secondary hover:text-blue-400'
-                            : 'cursor-not-allowed text-text-secondary/40'
-                        }`}
-                        title={conv.cliSessionId ? '继续对话（恢复上下文）' : '无法恢复上下文：缺少 CLI session'}
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="5" width="18" height="14" rx="2" />
-                          <path d="m7 10 3 2-3 2" />
-                          <path d="M13 15h5" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={(e) => deleteConversation(conv.id, e)}
-                        className="text-text-secondary hover:text-red-500 p-1"
-                        title="Delete"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+              {favoriteConversations.length > 0 && (
+                <div className="px-4 pt-3 pb-1 text-xs font-medium text-text-secondary">
+                  Favorites ({favoriteConversations.length})
                 </div>
-              ))}
+              )}
+              {favoriteConversations.map(renderConversationItem)}
+              {normalConversations.length > 0 && (
+                <div className="px-4 pt-3 pb-1 text-xs font-medium text-text-secondary">
+                  All ({normalConversations.length})
+                </div>
+              )}
+              {normalConversations.map(renderConversationItem)}
             </div>
           )}
           {hasMore && (
